@@ -3,50 +3,50 @@ from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
 
-class Company(Base):
-    __tablename__ = "companies"
+class Empresa(Base):
+    __tablename__ = "empresas"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True, nullable=False)
+    nome = Column(String, index=True, nullable=False)
     cnpj = Column(String(14), unique=True, nullable=True)
     email = Column(String, unique=True, index=True, nullable=False)
-    password = Column(String, nullable=False)
-    total_employees = Column(Integer, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    vacancies = relationship("Vacancy", back_populates="company")
+    senha = Column(String, nullable=False)
+    total_funcionarios = Column(Integer, nullable=True)
+    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+    vagas = relationship("Vaga", back_populates="empresa")
 
-class Apprentice(Base):
-    __tablename__ = "apprentices"
+class JovemAprendiz(Base):
+    __tablename__ = "jovens_aprendizes"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True, nullable=False)
+    nome = Column(String, index=True, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
-    password = Column(String, nullable=False)
-    birth_date = Column(Date, nullable=True)
-    city = Column(String, nullable=True)
-    description = Column(Text)
+    senha = Column(String, nullable=False)
+    data_nascimento = Column(Date, nullable=True)
+    cidade = Column(String, nullable=True)
+    descricao = Column(Text)
     video_url = Column(String, nullable=True)
-    accepted_lgpd = Column(Boolean, default=False, nullable=False)
-    accepted_aprendizagem = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    applications = relationship("Application", back_populates="apprentice")
+    aceitou_lgpd = Column(Boolean, default=False, nullable=False)
+    aceitou_lei_aprendizagem = Column(Boolean, default=False, nullable=False)
+    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+    candidaturas = relationship("Candidatura", back_populates="jovem")
 
-class Vacancy(Base):
-    __tablename__ = "vacancies"
+class Vaga(Base):
+    __tablename__ = "vagas"
     id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, index=True, nullable=False)
-    description = Column(Text)
-    is_open = Column(Boolean, default=True, nullable=False)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    company = relationship("Company", back_populates="vacancies")
-    applications = relationship("Application", back_populates="vacancy")
+    titulo = Column(String, index=True, nullable=False)
+    descricao = Column(Text)
+    aberta = Column(Boolean, default=True, nullable=False)
+    empresa_id = Column(Integer, ForeignKey("empresas.id"), nullable=False)
+    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+    empresa = relationship("Empresa", back_populates="vagas")
+    candidaturas = relationship("Candidatura", back_populates="vaga")
 
-class Application(Base):
-    __tablename__ = "applications"
-    __table_args__ = (UniqueConstraint("apprentice_id", "vacancy_id"),)
+class Candidatura(Base):
+    __tablename__ = "candidaturas"
+    __table_args__ = (UniqueConstraint("jovem_id", "vaga_id"),)
     id = Column(Integer, primary_key=True, index=True)
-    apprentice_id = Column(Integer, ForeignKey("apprentices.id"), nullable=False)
-    vacancy_id = Column(Integer, ForeignKey("vacancies.id"), nullable=False)
+    jovem_id = Column(Integer, ForeignKey("jovens_aprendizes.id"), nullable=False)
+    vaga_id = Column(Integer, ForeignKey("vagas.id"), nullable=False)
     status = Column(String, default="pendente", nullable=False)  # pendente, em_analise, contratado, recusado
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    apprentice = relationship("Apprentice", back_populates="applications")
-    vacancy = relationship("Vacancy", back_populates="applications")
+    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+    jovem = relationship("JovemAprendiz", back_populates="candidaturas")
+    vaga = relationship("Vaga", back_populates="candidaturas")

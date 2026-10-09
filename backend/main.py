@@ -7,11 +7,11 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import models
 from database import engine, get_db
-from matcher import calculate_match_score
+from matcher import calcular_compatibilidade
 
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Empregae Prototype API")
+app = FastAPI(title="Empregae API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -21,96 +21,96 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/health")
-def health(db: Session = Depends(get_db)):
+@app.get("/saude")
+def saude(db: Session = Depends(get_db)):
     db.execute(text("SELECT 1"))
-    return {"status": "ok", "database": engine.dialect.name}
+    return {"status": "ok", "banco": engine.dialect.name}
 
-class ApprenticeCreate(BaseModel):
-    name: str
+class JovemCriar(BaseModel):
+    nome: str
     email: str
-    password: str
-    description: str
-    accepted_lgpd: bool
-    accepted_aprendizagem: bool
+    senha: str
+    descricao: str
+    aceitou_lgpd: bool
+    aceitou_lei_aprendizagem: bool
 
-class CompanyCreate(BaseModel):
-    name: str
+class EmpresaCriar(BaseModel):
+    nome: str
     email: str
-    password: str
+    senha: str
 
-class VacancyCreate(BaseModel):
-    title: str
-    description: str
-    company_id: int
+class VagaCriar(BaseModel):
+    titulo: str
+    descricao: str
+    empresa_id: int
 
-@app.post("/apprentices/")
-def create_apprentice(apprentice: ApprenticeCreate, db: Session = Depends(get_db)):
-    if not apprentice.accepted_lgpd or not apprentice.accepted_aprendizagem:
+@app.post("/jovens/")
+def criar_jovem(jovem: JovemCriar, db: Session = Depends(get_db)):
+    if not jovem.aceitou_lgpd or not jovem.aceitou_lei_aprendizagem:
          raise HTTPException(status_code=400, detail="É necessário aceitar os termos da LGPD e da Lei da Aprendizagem.")
-    
-    db_apprentice = models.Apprentice(**apprentice.model_dump())
-    db.add(db_apprentice)
-    db.commit()
-    db.refresh(db_apprentice)
-    return {"message": "Jovem aprendiz cadastrado com sucesso!", "id": db_apprentice.id}
 
-@app.post("/companies/")
-def create_company(company: CompanyCreate, db: Session = Depends(get_db)):
-    db_company = models.Company(**company.model_dump())
-    db.add(db_company)
+    db_jovem = models.JovemAprendiz(**jovem.model_dump())
+    db.add(db_jovem)
     db.commit()
-    db.refresh(db_company)
-    return {"message": "Empresa cadastrada com sucesso!", "id": db_company.id}
+    db.refresh(db_jovem)
+    return {"mensagem": "Jovem aprendiz cadastrado com sucesso!", "id": db_jovem.id}
 
-@app.post("/vacancies/")
-def create_vacancy(vacancy: VacancyCreate, db: Session = Depends(get_db)):
-    db_vacancy = models.Vacancy(**vacancy.model_dump())
-    db.add(db_vacancy)
+@app.post("/empresas/")
+def criar_empresa(empresa: EmpresaCriar, db: Session = Depends(get_db)):
+    db_empresa = models.Empresa(**empresa.model_dump())
+    db.add(db_empresa)
     db.commit()
-    db.refresh(db_vacancy)
-    return {"message": "Vaga cadastrada com sucesso!", "id": db_vacancy.id}
+    db.refresh(db_empresa)
+    return {"mensagem": "Empresa cadastrada com sucesso!", "id": db_empresa.id}
 
-@app.get("/vacancies/match/{apprentice_id}")
-def match_vacancies(apprentice_id: int, db: Session = Depends(get_db)):
-    apprentice = db.query(models.Apprentice).filter(models.Apprentice.id == apprentice_id).first()
-    if not apprentice:
+@app.post("/vagas/")
+def criar_vaga(vaga: VagaCriar, db: Session = Depends(get_db)):
+    db_vaga = models.Vaga(**vaga.model_dump())
+    db.add(db_vaga)
+    db.commit()
+    db.refresh(db_vaga)
+    return {"mensagem": "Vaga cadastrada com sucesso!", "id": db_vaga.id}
+
+@app.get("/vagas/recomendadas/{jovem_id}")
+def vagas_recomendadas(jovem_id: int, db: Session = Depends(get_db)):
+    jovem = db.query(models.JovemAprendiz).filter(models.JovemAprendiz.id == jovem_id).first()
+    if not jovem:
         raise HTTPException(status_code=404, detail="Jovem aprendiz não encontrado")
-    
-    vacancies = db.query(models.Vacancy).all()
-    results = []
-    for vac in vacancies:
-        score = calculate_match_score(apprentice.description, vac.description)
-        results.append({
-            "vacancy_id": vac.id,
-            "title": vac.title,
-            "description": vac.description,
-            "company_name": vac.company.name if vac.company else "Desconhecida",
-            "match_score": score
-        })
-    
-    results.sort(key=lambda x: x["match_score"], reverse=True)
-    return results
 
-@app.get("/companies/{company_id}/candidates")
-def get_candidates_for_company(company_id: int, db: Session = Depends(get_db)):
-    vacancies = db.query(models.Vacancy).filter(models.Vacancy.company_id == company_id).all()
-    apprentices = db.query(models.Apprentice).all()
-    
-    matches = []
-    for vac in vacancies:
-        for app in apprentices:
-            score = calculate_match_score(app.description, vac.description)
-            if score > 0:
-                 matches.append({
-                     "vacancy_title": vac.title,
-                     "candidate_name": app.name,
-                     "candidate_email": app.email,
-                     "candidate_description": app.description,
-                     "match_score": score
+    vagas = db.query(models.Vaga).all()
+    resultados = []
+    for vaga in vagas:
+        pontuacao = calcular_compatibilidade(jovem.descricao, vaga.descricao)
+        resultados.append({
+            "vaga_id": vaga.id,
+            "titulo": vaga.titulo,
+            "descricao": vaga.descricao,
+            "empresa_nome": vaga.empresa.nome if vaga.empresa else "Desconhecida",
+            "compatibilidade": pontuacao
+        })
+
+    resultados.sort(key=lambda x: x["compatibilidade"], reverse=True)
+    return resultados
+
+@app.get("/empresas/{empresa_id}/candidatos")
+def candidatos_da_empresa(empresa_id: int, db: Session = Depends(get_db)):
+    vagas = db.query(models.Vaga).filter(models.Vaga.empresa_id == empresa_id).all()
+    jovens = db.query(models.JovemAprendiz).all()
+
+    candidatos = []
+    for vaga in vagas:
+        for jovem in jovens:
+            pontuacao = calcular_compatibilidade(jovem.descricao, vaga.descricao)
+            if pontuacao > 0:
+                 candidatos.append({
+                     "vaga_titulo": vaga.titulo,
+                     "candidato_nome": jovem.nome,
+                     "candidato_email": jovem.email,
+                     "candidato_descricao": jovem.descricao,
+                     "compatibilidade": pontuacao
                  })
-    matches.sort(key=lambda x: x["match_score"], reverse=True)
-    return matches
+    candidatos.sort(key=lambda x: x["compatibilidade"], reverse=True)
+    return candidatos
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

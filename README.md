@@ -9,7 +9,7 @@ empregae/
 ├── backend/            API em Python (FastAPI + SQLAlchemy)
 │   ├── main.py         rotas da API e servidor do frontend
 │   ├── database.py     conexão com o banco (lê DATABASE_URL do .env)
-│   ├── models.py       tabelas: companies, apprentices, vacancies, applications
+│   ├── models.py       tabelas: empresas, jovens_aprendizes, vagas, candidaturas
 │   ├── matcher.py      filtro inteligente (TF-IDF + similaridade de cosseno)
 │   ├── tests/          testes automatizados (pytest)
 │   └── .env.example    modelo das variáveis de ambiente
@@ -41,7 +41,7 @@ uvicorn main:app --reload
 Acesse:
 - Aplicação: http://localhost:8000
 - Documentação da API: http://localhost:8000/docs
-- Saúde da API/banco: http://localhost:8000/health
+- Saúde da API/banco: http://localhost:8000/saude
 
 ## Testes
 

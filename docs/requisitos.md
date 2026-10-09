@@ -54,15 +54,26 @@ Conectar **jovens aprendizes** a **empresas que precisam cumprir a cota obrigat�
 ## 6. Modelo de dados (Semana 2)
 
 ```
-companies 1 ──── N vacancies 1 ──── N applications N ──── 1 apprentices
+empresas 1 ──── N vagas 1 ──── N candidaturas N ──── 1 jovens_aprendizes
 ```
 
-- **companies**: id, name, cnpj, email, password, total_employees, created_at
-- **apprentices**: id, name, email, password, birth_date, city, description, video_url, accepted_lgpd, accepted_aprendizagem, created_at
-- **vacancies**: id, title, description, is_open, company_id, created_at
-- **applications**: id, apprentice_id, vacancy_id, status (`pendente`, `em_analise`, `contratado`, `recusado`), created_at — par (apprentice_id, vacancy_id) único
+- **empresas**: id, nome, cnpj, email, senha, total_funcionarios, criado_em
+- **jovens_aprendizes**: id, nome, email, senha, data_nascimento, cidade, descricao, video_url, aceitou_lgpd, aceitou_lei_aprendizagem, criado_em
+- **vagas**: id, titulo, descricao, aberta, empresa_id, criado_em
+- **candidaturas**: id, jovem_id, vaga_id, status (`pendente`, `em_analise`, `contratado`, `recusado`), criado_em — par (jovem_id, vaga_id) único
 
-## 7. Situação do protótipo inicial (diagnóstico)
+## 7. Rotas da API
+
+| Método | Rota | Descrição |
+|---|---|---|
+| GET | `/saude` | Verifica se a API e o banco estão no ar |
+| POST | `/jovens/` | Cadastra jovem aprendiz |
+| POST | `/empresas/` | Cadastra empresa |
+| POST | `/vagas/` | Publica vaga |
+| GET | `/vagas/recomendadas/{jovem_id}` | Vagas ordenadas por compatibilidade com o jovem |
+| GET | `/empresas/{empresa_id}/candidatos` | Candidatos compatíveis com as vagas da empresa |
+
+## 8. Situação do protótipo inicial (diagnóstico)
 
 | Item | Situação |
 |---|---|

@@ -16,7 +16,7 @@ function render() {
             </div>
             <div>
                 ${state.currentUser ? `
-                    <span style="margin-right: 1rem;">Olá, ${state.currentUser.name}</span>
+                    <span style="margin-right: 1rem;">Olá, ${state.currentUser.nome}</span>
                     <button class="btn btn-secondary" onclick="logout()">Sair</button>
                 ` : `
                     <button class="btn btn-primary" onclick="navigate('landing')">Início</button>
@@ -211,10 +211,10 @@ function renderApprenticeDashboard() {
             <div class="grid-2">
                 <div class="glass-panel">
                     <h3>Meu Perfil</h3>
-                    <p><strong>Nome:</strong> ${state.currentUser.name}</p>
+                    <p><strong>Nome:</strong> ${state.currentUser.nome}</p>
                     <p><strong>E-mail:</strong> ${state.currentUser.email}</p>
                     <p style="margin-top: 1rem;"><strong>Minha Descrição:</strong><br>
-                    <span style="color: var(--text-muted);">${state.currentUser.description}</span></p>
+                    <span style="color: var(--text-muted);">${state.currentUser.descricao}</span></p>
                     
                     <div class="chat-box" style="margin-top: 2rem;">
                         <div style="text-align: center; color: var(--text-muted);">
@@ -249,16 +249,16 @@ function renderApprenticeDashboard() {
 async function handleRegisterApprentice(e) {
     e.preventDefault();
     const data = {
-        name: document.getElementById('app_name').value,
+        nome: document.getElementById('app_name').value,
         email: document.getElementById('app_email').value,
-        password: document.getElementById('app_password').value,
-        description: document.getElementById('app_desc').value,
-        accepted_lgpd: document.getElementById('lgpd').checked,
-        accepted_aprendizagem: document.getElementById('lei').checked
+        senha: document.getElementById('app_password').value,
+        descricao: document.getElementById('app_desc').value,
+        aceitou_lgpd: document.getElementById('lgpd').checked,
+        aceitou_lei_aprendizagem: document.getElementById('lei').checked
     };
     
     try {
-        const res = await fetch(API_URL + '/apprentices/', {
+        const res = await fetch(API_URL + '/jovens/', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(data)
@@ -283,13 +283,13 @@ async function handleRegisterApprentice(e) {
 async function handleRegisterCompany(e) {
     e.preventDefault();
     const data = {
-        name: document.getElementById('comp_name').value,
+        nome: document.getElementById('comp_name').value,
         email: document.getElementById('comp_email').value,
-        password: document.getElementById('comp_password').value
+        senha: document.getElementById('comp_password').value
     };
     
     try {
-        const res = await fetch(API_URL + '/companies/', {
+        const res = await fetch(API_URL + '/empresas/', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(data)
@@ -312,13 +312,13 @@ async function handleRegisterCompany(e) {
 async function handleCreateVacancy(e) {
     e.preventDefault();
     const data = {
-        title: document.getElementById('vac_title').value,
-        description: document.getElementById('vac_desc').value,
-        company_id: state.currentUser.id
+        titulo: document.getElementById('vac_title').value,
+        descricao: document.getElementById('vac_desc').value,
+        empresa_id: state.currentUser.id
     };
     
     try {
-        await fetch(API_URL + '/vacancies/', {
+        await fetch(API_URL + '/vagas/', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(data)
@@ -336,7 +336,7 @@ async function handleCreateVacancy(e) {
 
 async function fetchApprenticeMatches() {
     try {
-        const res = await fetch(API_URL + '/vacancies/match/' + state.currentUser.id);
+        const res = await fetch(API_URL + '/vagas/recomendadas/' + state.currentUser.id);
         if(res.ok) {
             const matches = await res.json();
             renderMatches(matches, 'recommended_vacancies', true);
@@ -353,7 +353,7 @@ function mockApprenticeMatches() {
         <div class="card">
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <h4>Assistente Administrativo</h4>
-                <span class="badge">95% Match</span>
+                <span class="badge">95% compatível</span>
             </div>
             <p style="font-size:0.8rem; color:var(--text-muted); margin: 5px 0;">Empresa: TechCorp</p>
             <p style="font-size:0.9rem;">Buscamos jovem para auxiliar nas rotinas administrativas diárias e organização de documentos.</p>
@@ -364,7 +364,7 @@ function mockApprenticeMatches() {
 
 async function fetchCompanyCandidates() {
     try {
-        const res = await fetch(API_URL + '/companies/' + state.currentUser.id + '/candidates');
+        const res = await fetch(API_URL + '/empresas/' + state.currentUser.id + '/candidatos');
         if(res.ok) {
             const candidates = await res.json();
             renderMatches(candidates, 'candidates_list', false);
@@ -389,13 +389,13 @@ function renderMatches(data, elementId, isApprentice) {
         html += `
             <div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <h4>${isApprentice ? item.title : item.candidate_name}</h4>
-                    <span class="badge">${item.match_score}% Match</span>
+                    <h4>${isApprentice ? item.titulo : item.candidato_nome}</h4>
+                    <span class="badge">${item.compatibilidade}% compatível</span>
                 </div>
                 <p style="font-size:0.8rem; color:var(--text-muted); margin: 5px 0;">
-                    ${isApprentice ? 'Empresa: ' + item.company_name : 'Para a vaga: ' + item.vacancy_title}
+                    ${isApprentice ? 'Empresa: ' + item.empresa_nome : 'Para a vaga: ' + item.vaga_titulo}
                 </p>
-                <p style="font-size:0.9rem;">${isApprentice ? item.description : item.candidate_description}</p>
+                <p style="font-size:0.9rem;">${isApprentice ? item.descricao : item.candidato_descricao}</p>
                 <button class="btn ${isApprentice ? 'btn-primary' : 'btn-secondary'}" style="margin-top: 10px; padding: 6px 12px; font-size:0.8rem;">
                     ${isApprentice ? 'Candidatar-se' : 'Iniciar Chat'}
                 </button>

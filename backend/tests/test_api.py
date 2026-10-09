@@ -25,35 +25,35 @@ def override_get_db():
 app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
 
-def test_health():
-    assert client.get("/health").json()["status"] == "ok"
+def test_saude():
+    assert client.get("/saude").json()["status"] == "ok"
 
 def test_fluxo_cadastro_vaga_e_match():
-    jovem = client.post("/apprentices/", json={
-        "name": "Ana", "email": "ana@ex.com", "password": "123",
-        "description": "gosto de organizar documentos e rotinas administrativas",
-        "accepted_lgpd": True, "accepted_aprendizagem": True,
+    jovem = client.post("/jovens/", json={
+        "nome": "Ana", "email": "ana@ex.com", "senha": "123",
+        "descricao": "gosto de organizar documentos e rotinas administrativas",
+        "aceitou_lgpd": True, "aceitou_lei_aprendizagem": True,
     })
     assert jovem.status_code == 200
-    empresa = client.post("/companies/", json={"name": "TechCorp", "email": "rh@tech.com", "password": "123"})
+    empresa = client.post("/empresas/", json={"nome": "TechCorp", "email": "rh@tech.com", "senha": "123"})
     assert empresa.status_code == 200
-    vaga = client.post("/vacancies/", json={
-        "title": "Assistente Administrativo",
-        "description": "auxiliar nas rotinas administrativas e organizar documentos",
-        "company_id": empresa.json()["id"],
+    vaga = client.post("/vagas/", json={
+        "titulo": "Assistente Administrativo",
+        "descricao": "auxiliar nas rotinas administrativas e organizar documentos",
+        "empresa_id": empresa.json()["id"],
     })
     assert vaga.status_code == 200
 
-    matches = client.get(f"/vacancies/match/{jovem.json()['id']}").json()
-    assert matches[0]["title"] == "Assistente Administrativo"
-    assert matches[0]["match_score"] > 0
+    recomendadas = client.get(f"/vagas/recomendadas/{jovem.json()['id']}").json()
+    assert recomendadas[0]["titulo"] == "Assistente Administrativo"
+    assert recomendadas[0]["compatibilidade"] > 0
 
-    candidatos = client.get(f"/companies/{empresa.json()['id']}/candidates").json()
-    assert candidatos[0]["candidate_name"] == "Ana"
+    candidatos = client.get(f"/empresas/{empresa.json()['id']}/candidatos").json()
+    assert candidatos[0]["candidato_nome"] == "Ana"
 
 def test_cadastro_bloqueado_sem_aceite_lgpd():
-    res = client.post("/apprentices/", json={
-        "name": "Bia", "email": "bia@ex.com", "password": "123", "description": "x",
-        "accepted_lgpd": False, "accepted_aprendizagem": True,
+    res = client.post("/jovens/", json={
+        "nome": "Bia", "email": "bia@ex.com", "senha": "123", "descricao": "x",
+        "aceitou_lgpd": False, "aceitou_lei_aprendizagem": True,
     })
     assert res.status_code == 400
