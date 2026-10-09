@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+.pytest_cache/
+
+# Banco local e segredos
+*.db
+.env
+
+# Sistema
+.DS_Store
+desktop.ini
+.vscode/

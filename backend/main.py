@@ -1,14 +1,14 @@
+from pathlib import Path
 from fastapi import FastAPI, Depends, HTTPException, status
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import models
+from database import engine, get_db
 from matcher import calculate_match_score
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./empregae.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Empregae Prototype API")
@@ -21,12 +21,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+@app.get("/health")
+def health(db: Session = Depends(get_db)):
+    db.execute(text("SELECT 1"))
+    return {"status": "ok", "database": engine.dialect.name}
 
 class ApprenticeCreate(BaseModel):
     name: str
@@ -113,3 +111,6 @@ def get_candidates_for_company(company_id: int, db: Session = Depends(get_db)):
                  })
     matches.sort(key=lambda x: x["match_score"], reverse=True)
     return matches
+
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

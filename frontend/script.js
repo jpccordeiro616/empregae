@@ -5,7 +5,7 @@ const state = {
     candidates: []
 };
 
-const API_URL = 'http://localhost:8000';
+const API_URL = '';
 
 function render() {
     const app = document.getElementById('app');
