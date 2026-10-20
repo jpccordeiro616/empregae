@@ -53,25 +53,59 @@ Conectar **jovens aprendizes** a **empresas que precisam cumprir a cota obrigat�
 
 ## 6. Modelo de dados (Semana 2)
 
+As tabelas são criadas em SQL pelo arquivo [`backend/schema.sql`](../backend/schema.sql), executado no SQL Editor do Supabase.
+
 ```
 empresas 1 ──── N vagas 1 ──── N candidaturas N ──── 1 jovens_aprendizes
 ```
 
-- **empresas**: id, nome, cnpj, email, senha, total_funcionarios, criado_em
-- **jovens_aprendizes**: id, nome, email, senha, data_nascimento, cidade, descricao, video_url, aceitou_lgpd, aceitou_lei_aprendizagem, criado_em
+- **empresas**: id, nome, cnpj, email, senha_hash, total_funcionarios, criado_em
+- **jovens_aprendizes**: id, nome, email, senha_hash, data_nascimento, cidade, descricao, curriculo_url, video_url, aceitou_lgpd, aceitou_lei_aprendizagem, criado_em
 - **vagas**: id, titulo, descricao, aberta, empresa_id, criado_em
 - **candidaturas**: id, jovem_id, vaga_id, status (`pendente`, `em_analise`, `contratado`, `recusado`), criado_em — par (jovem_id, vaga_id) único
 
 ## 7. Rotas da API
 
-| Método | Rota | Descrição |
-|---|---|---|
-| GET | `/saude` | Verifica se a API e o banco estão no ar |
-| POST | `/jovens/` | Cadastra jovem aprendiz |
-| POST | `/empresas/` | Cadastra empresa |
-| POST | `/vagas/` | Publica vaga |
-| GET | `/vagas/recomendadas/{jovem_id}` | Vagas ordenadas por compatibilidade com o jovem |
-| GET | `/empresas/{empresa_id}/candidatos` | Candidatos compatíveis com as vagas da empresa |
+Rotas marcadas com 🔒 exigem login: enviar o cabeçalho `Authorization: Bearer <token>`.
+O token é devolvido no cadastro e no login e vale por 24 horas.
+
+**Cadastro, login e perfis (Semana 3)**
+
+| Método | Rota | Quem | Descrição |
+|---|---|---|---|
+| GET | `/saude` | todos | Verifica se a API e o banco estão no ar |
+| POST | `/jovens/` | todos | Cadastra jovem (exige aceite da LGPD e da Lei da Aprendizagem) |
+| POST | `/empresas/` | todos | Cadastra empresa (CNPJ e nº de funcionários opcionais) |
+| POST | `/login` | todos | Login com `email`, `senha` e `tipo` (`jovem` ou `empresa`) |
+| GET / PATCH | `/jovens/me` | 🔒 jovem | Ver / atualizar perfil (nome, descrição, cidade, data de nascimento) |
+| POST | `/jovens/me/curriculo` | 🔒 jovem | Envia currículo (PDF, até 5 MB) |
+| POST | `/jovens/me/video` | 🔒 jovem | Envia vídeo de apresentação (MP4, WebM ou MOV, até 50 MB) |
+| GET | `/arquivos/{nome}` | 🔒 empresa ou dono | Baixa currículo/vídeo |
+| GET / PATCH | `/empresas/me` | 🔒 empresa | Ver / atualizar perfil (nome, CNPJ, total de funcionários) |
+
+**Vagas, candidaturas e filtro inteligente (Semana 4)**
+
+| Método | Rota | Quem | Descrição |
+|---|---|---|---|
+| POST | `/vagas/` | 🔒 empresa | Publica vaga |
+| GET | `/vagas/?busca=` | todos | Lista vagas abertas; busca por título, descrição ou empresa |
+| GET | `/vagas/{id}` | todos | Detalhes da vaga |
+| PATCH | `/vagas/{id}` | 🔒 empresa dona | Edita ou encerra (`aberta: false`) a vaga |
+| GET | `/empresas/me/vagas` | 🔒 empresa | Vagas da empresa com nº de candidaturas |
+| POST | `/vagas/{id}/candidaturas` | 🔒 jovem | Candidata-se (uma vez por vaga; só vagas abertas) |
+| GET | `/jovens/me/candidaturas` | 🔒 jovem | Minhas candidaturas e status |
+| GET | `/empresas/me/candidaturas` | 🔒 empresa | Candidaturas recebidas, ordenadas por compatibilidade |
+| PATCH | `/candidaturas/{id}` | 🔒 empresa dona | Muda status: `pendente`, `em_analise`, `contratado`, `recusado` |
+| GET | `/empresas/me/cota` | 🔒 empresa | Cota mínima (5%) e máxima (15%), contratados e quantos faltam |
+| GET | `/jovens/me/recomendacoes` | 🔒 jovem | Vagas abertas ordenadas por compatibilidade com o perfil |
+| GET | `/empresas/me/candidatos` | 🔒 empresa | Jovens compatíveis com as vagas abertas da empresa |
+
+### Como funciona o Filtro Inteligente
+
+1. Junta o texto do perfil (descrição do jovem) e os textos das vagas (título + descrição).
+2. Remove acentos e palavras comuns que não diferenciam perfis ("de", "para", "gosto", "vaga"...).
+3. Calcula o **TF-IDF** sobre o conjunto: palavras raras entre as vagas pesam mais que palavras que aparecem em todas.
+4. Mede a **similaridade de cosseno** entre o perfil e cada vaga e converte para 0–100%.
 
 ## 8. Situação do protótipo inicial (diagnóstico)
 

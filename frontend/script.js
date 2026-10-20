@@ -1,11 +1,19 @@
 const state = {
     view: 'landing',
     currentUser: null,
+    token: null,
     vacancies: [],
     candidates: []
 };
 
 const API_URL = '';
+
+// Envia o token de login em todas as chamadas à API.
+function apiFetch(path, options = {}) {
+    const headers = {'Content-Type': 'application/json', ...(options.headers || {})};
+    if (state.token) headers['Authorization'] = 'Bearer ' + state.token;
+    return fetch(API_URL + path, {...options, headers});
+}
 
 function render() {
     const app = document.getElementById('app');
@@ -48,6 +56,7 @@ function navigate(view) {
 
 function logout() {
     state.currentUser = null;
+    state.token = null;
     navigate('landing');
 }
 
@@ -265,12 +274,13 @@ async function handleRegisterApprentice(e) {
         });
         if(res.ok) {
             const result = await res.json();
-            state.currentUser = { id: result.id, type: 'apprentice', ...data };
+            state.token = result.token;
+            state.currentUser = { id: result.id, type: 'apprentice', nome: data.nome, email: data.email, descricao: data.descricao };
             navigate('dashboard-apprentice');
             setTimeout(fetchApprenticeMatches, 500);
         } else {
             const err = await res.json();
-            alert('Erro: ' + (err.detail || 'Falha no cadastro'));
+            alert('Erro: ' + (typeof err.detail === 'string' ? err.detail : 'Falha no cadastro'));
         }
     } catch(err) {
         // Fallback mockup
@@ -296,11 +306,13 @@ async function handleRegisterCompany(e) {
         });
         if(res.ok) {
             const result = await res.json();
-            state.currentUser = { id: result.id, type: 'company', ...data };
+            state.token = result.token;
+            state.currentUser = { id: result.id, type: 'company', nome: data.nome, email: data.email };
             navigate('dashboard-company');
             setTimeout(fetchCompanyCandidates, 500);
         } else {
-            alert('Erro no cadastro');
+            const err = await res.json();
+            alert('Erro: ' + (typeof err.detail === 'string' ? err.detail : 'Falha no cadastro'));
         }
     } catch(err) {
         state.currentUser = { id: 1, type: 'company', ...data };
@@ -313,16 +325,19 @@ async function handleCreateVacancy(e) {
     e.preventDefault();
     const data = {
         titulo: document.getElementById('vac_title').value,
-        descricao: document.getElementById('vac_desc').value,
-        empresa_id: state.currentUser.id
+        descricao: document.getElementById('vac_desc').value
     };
     
     try {
-        await fetch(API_URL + '/vagas/', {
+        const res = await apiFetch('/vagas/', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(data)
         });
+        if(!res.ok) {
+            const err = await res.json();
+            alert('Erro: ' + (typeof err.detail === 'string' ? err.detail : 'Verifique o título (mín. 3 letras) e a descrição (mín. 10).'));
+            return;
+        }
         document.getElementById('vac_title').value = '';
         document.getElementById('vac_desc').value = '';
         alert('Vaga publicada com sucesso!');
@@ -336,7 +351,7 @@ async function handleCreateVacancy(e) {
 
 async function fetchApprenticeMatches() {
     try {
-        const res = await fetch(API_URL + '/vagas/recomendadas/' + state.currentUser.id);
+        const res = await apiFetch('/jovens/me/recomendacoes');
         if(res.ok) {
             const matches = await res.json();
             renderMatches(matches, 'recommended_vacancies', true);
@@ -364,7 +379,7 @@ function mockApprenticeMatches() {
 
 async function fetchCompanyCandidates() {
     try {
-        const res = await fetch(API_URL + '/empresas/' + state.currentUser.id + '/candidatos');
+        const res = await apiFetch('/empresas/me/candidatos');
         if(res.ok) {
             const candidates = await res.json();
             renderMatches(candidates, 'candidates_list', false);

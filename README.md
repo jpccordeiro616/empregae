@@ -9,6 +9,8 @@ empregae/
 ├── backend/            API em Python (FastAPI + SQLAlchemy)
 │   ├── main.py         rotas da API e servidor do frontend
 │   ├── database.py     conexão com o banco (lê DATABASE_URL do .env)
+│   ├── auth.py         senhas (bcrypt) e login com token JWT
+│   ├── schema.sql      criação das tabelas em SQL (rodar no Supabase)
 │   ├── models.py       tabelas: empresas, jovens_aprendizes, vagas, candidaturas
 │   ├── matcher.py      filtro inteligente (TF-IDF + similaridade de cosseno)
 │   ├── tests/          testes automatizados (pytest)
@@ -33,8 +35,12 @@ pip install -r requirements.txt
 cp .env.example .env
 # Edite o .env e cole em DATABASE_URL a connection string do Supabase:
 # Connect → Direct → Session pooler (troque [YOUR-PASSWORD] pela senha, sem colchetes)
+# e em JWT_SECRET uma chave aleatória: python -c "import secrets; print(secrets.token_urlsafe(48))"
 
-# 3. Subir a API (as tabelas são criadas automaticamente)
+# 3. Criar as tabelas (só na primeira vez)
+# Supabase → SQL Editor → cole o conteúdo de backend/schema.sql → Run
+
+# 4. Subir a API
 uvicorn main:app --reload
 ```
 
