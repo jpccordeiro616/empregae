@@ -1,0 +1,31 @@
+# Mantém o projeto do Supabase ativo.
+# No plano gratuito, o Supabase pausa projetos após ~7 dias sem atividade;
+# esta tarefa faz uma consulta simples no banco a cada 3 dias.
+#
+# Requer o secret DATABASE_URL (Settings → Secrets and variables → Actions),
+# com a mesma connection string do backend/.env (formato postgresql://...).
+# Se a consulta falhar, o GitHub envia um e-mail avisando.
+
+name: Supabase keepalive
+
+on:
+  schedule:
+    - cron: "0 12 */3 * *"  # a cada 3 dias, 12:00 UTC (09:00 em Brasília)
+  workflow_dispatch:         # permite rodar manualmente pela aba Actions
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Consulta no banco
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::Secret DATABASE_URL não configurado."
+            exit 1
+          fi
+          # Remove o "+psycopg" caso a URL tenha sido copiada nesse formato.
+          URL="${DATABASE_URL/postgresql+psycopg:/postgresql:}"
+          psql "$URL" -v ON_ERROR_STOP=1 -c "SELECT now() AS ping, (SELECT count(*) FROM vagas) AS vagas;"
