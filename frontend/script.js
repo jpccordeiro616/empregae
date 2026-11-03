@@ -145,13 +145,32 @@ async function entrar(token, tipo) {
     irParaPainel();
 }
 
-function sair() {
+function limparEstado() {
     state.token = null;
     state.tipo = null;
     state.usuario = null;
     state.jovem = {aba: 'vagas', recomendacoes: null, candidaturas: null, busca: '', resultadosBusca: null, conversaAtiva: 0, videoUrl: null};
+}
+
+function sair() {
+    limparEstado();
     limparSessao();
     navigate('landing');
+}
+
+// ---------- Tema claro/escuro ----------
+
+const TEMA_KEY = 'empregae_tema';
+
+function temaAtual() {
+    return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+}
+
+function alternarTema() {
+    const novo = temaAtual() === 'light' ? 'dark' : 'light';
+    document.documentElement.dataset.theme = novo;
+    try { localStorage.setItem(TEMA_KEY, novo); } catch (e) {}
+    render();
 }
 
 function render() {
@@ -176,12 +195,19 @@ function renderNavbar() {
         <button class="btn btn-ghost btn-sm" onclick="navigate('login')">Entrar</button>
         <button class="btn btn-primary btn-sm" onclick="navigate('cadastro-jovem')">Criar conta</button>
     `;
+    const claro = temaAtual() === 'light';
+    const botaoTema = `
+        <button class="btn btn-ghost btn-sm btn-icon" onclick="alternarTema()"
+            aria-label="${claro ? 'Ativar tema escuro' : 'Ativar tema claro'}" title="${claro ? 'Tema escuro' : 'Tema claro'}">
+            <i data-lucide="${claro ? 'moon' : 'sun'}"></i>
+        </button>
+    `;
     return `
         <nav class="navbar">
             <button class="logo" onclick="${state.usuario ? 'irParaPainel()' : "navigate('landing')"}">
                 <i data-lucide="briefcase"></i> Empregae
             </button>
-            <div class="row">${direita}</div>
+            <div class="row">${botaoTema}${direita}</div>
         </nav>
     `;
 }
@@ -545,11 +571,13 @@ function itensPerfil(u) {
 }
 
 async function carregarPainelJovem() {
+    const token = state.token;
     try {
         const [recomendacoes, candidaturas] = await Promise.all([
             api('/jovens/me/recomendacoes'),
             api('/jovens/me/candidaturas'),
         ]);
+        if (state.token !== token) return;  // trocou de conta enquanto carregava
         state.jovem.recomendacoes = recomendacoes;
         state.jovem.candidaturas = candidaturas;
     } catch (err) {
@@ -1022,7 +1050,8 @@ function handleOrgChart(e) {
 
 // ---------- Início: restaura a sessão salva, se houver ----------
 
-window.onload = async () => {
+async function iniciarSessao() {
+    limparEstado();
     const sessao = lerSessao();
     if (sessao && sessao.token) {
         try {
@@ -1033,5 +1062,18 @@ window.onload = async () => {
             return;
         }
     }
-    render();
-};
+    navigate('landing');
+}
+
+window.onload = iniciarSessao;
+
+// Mantém as abas abertas sincronizadas: entrar, sair ou trocar de conta (ou de tema)
+// em uma aba atualiza as outras.
+window.addEventListener('storage', (e) => {
+    if (e.key === SESSAO_KEY) {
+        iniciarSessao();
+    } else if (e.key === TEMA_KEY && e.newValue) {
+        document.documentElement.dataset.theme = e.newValue;
+        render();
+    }
+});

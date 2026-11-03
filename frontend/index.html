@@ -5,6 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Empregae - Conectando Jovens e Empresas</title>
     <meta name="description" content="Plataforma que conecta jovens aprendizes a empresas que precisam cumprir a cota da Lei da Aprendizagem.">
+    <script>
+        // Aplica o tema antes de desenhar a página: escolha salva ou preferência do sistema.
+        (function () {
+            var tema = null;
+            try { tema = localStorage.getItem('empregae_tema'); } catch (e) {}
+            if (!tema) tema = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+            document.documentElement.dataset.theme = tema;
+        })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
