@@ -49,6 +49,16 @@ Acesse:
 - Documentação da API: http://localhost:8000/docs
 - Saúde da API/banco: http://localhost:8000/saude
 
+## Telas
+
+| Tela | O que tem |
+|---|---|
+| Página inicial | Apresentação, como funciona, público, resumo da Lei da Aprendizagem |
+| Entrar | Login de jovem ou empresa (a sessão fica salva no navegador) |
+| Cadastro de jovem / empresa | Formulários com validação e mensagens de erro |
+| Painel do jovem | Vagas recomendadas e busca, candidaturas com status, mensagens (prévia), perfil com currículo e vídeo |
+| Painel da empresa | Nova vaga, cota e candidatos compatíveis (em evolução na Semana 7) |
+
 ## Testes
 
 ```bash
