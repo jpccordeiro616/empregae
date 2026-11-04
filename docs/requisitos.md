@@ -57,12 +57,14 @@ As tabelas são criadas em SQL pelo arquivo [`backend/schema.sql`](../backend/sc
 
 ```
 empresas 1 ──── N vagas 1 ──── N candidaturas N ──── 1 jovens_aprendizes
+empresas 1 ──── N setores
 ```
 
-- **empresas**: id, nome, cnpj, email, senha_hash, total_funcionarios, criado_em
+- **empresas**: id, nome, cnpj, email, senha_hash, total_funcionarios, descricao, cidade, area_atuacao, site, criado_em
 - **jovens_aprendizes**: id, nome, email, senha_hash, data_nascimento, cidade, descricao, curriculo_url, video_url, aceitou_lgpd, aceitou_lei_aprendizagem, criado_em
 - **vagas**: id, titulo, descricao, aberta, empresa_id, criado_em
 - **candidaturas**: id, jovem_id, vaga_id, status (`pendente`, `em_analise`, `contratado`, `recusado`), criado_em — par (jovem_id, vaga_id) único
+- **setores** (organograma): id, empresa_id, nome, funcionarios, exige_formacao, criado_em
 
 ## 7. Rotas da API
 
@@ -81,7 +83,7 @@ O token é devolvido no cadastro e no login e vale por 24 horas.
 | POST | `/jovens/me/curriculo` | 🔒 jovem | Envia currículo (PDF, até 5 MB) |
 | POST | `/jovens/me/video` | 🔒 jovem | Envia vídeo de apresentação (MP4, WebM ou MOV, até 50 MB) |
 | GET | `/arquivos/{nome}` | 🔒 empresa ou dono | Baixa currículo/vídeo |
-| GET / PATCH | `/empresas/me` | 🔒 empresa | Ver / atualizar perfil (nome, CNPJ, total de funcionários) |
+| GET / PATCH | `/empresas/me` | 🔒 empresa | Ver / atualizar perfil (nome, CNPJ, descrição, cidade, área de atuação, site) |
 
 **Vagas, candidaturas e filtro inteligente (Semana 4)**
 
@@ -89,6 +91,7 @@ O token é devolvido no cadastro e no login e vale por 24 horas.
 |---|---|---|---|
 | POST | `/vagas/` | 🔒 empresa | Publica vaga |
 | GET | `/vagas/?busca=` | todos | Lista vagas abertas; busca por título, descrição ou empresa |
+| GET | `/empresas/{id}/perfil` | todos | Perfil público da empresa (apresentação e vagas abertas; sem e-mail, CNPJ ou cota) |
 | GET | `/vagas/{id}` | todos | Detalhes da vaga |
 | PATCH | `/vagas/{id}` | 🔒 empresa dona | Edita ou encerra (`aberta: false`) a vaga |
 | GET | `/empresas/me/vagas` | 🔒 empresa | Vagas da empresa com nº de candidaturas |
@@ -97,6 +100,7 @@ O token é devolvido no cadastro e no login e vale por 24 horas.
 | GET | `/empresas/me/candidaturas` | 🔒 empresa | Candidaturas recebidas, ordenadas por compatibilidade |
 | PATCH | `/candidaturas/{id}` | 🔒 empresa dona | Muda status: `pendente`, `em_analise`, `contratado`, `recusado` |
 | GET | `/empresas/me/cota` | 🔒 empresa | Cota mínima (5%) e máxima (15%), contratados e quantos faltam |
+| GET / PUT | `/empresas/me/organograma` | 🔒 empresa | Ver / salvar os setores; a base da cota é a soma dos setores que exigem formação (Semana 7) |
 | GET | `/jovens/me/recomendacoes` | 🔒 jovem | Vagas abertas ordenadas por compatibilidade com o perfil |
 | GET | `/empresas/me/candidatos` | 🔒 empresa | Jovens compatíveis com as vagas abertas da empresa |
 

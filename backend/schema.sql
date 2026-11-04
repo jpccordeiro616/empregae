@@ -9,8 +9,18 @@ CREATE TABLE IF NOT EXISTS empresas (
     email               VARCHAR NOT NULL UNIQUE,
     senha_hash          VARCHAR NOT NULL,  -- bcrypt, nunca a senha pura
     total_funcionarios  INTEGER CHECK (total_funcionarios >= 0),
+    descricao           TEXT,              -- apresentação exibida aos jovens
+    cidade              VARCHAR,
+    area_atuacao        VARCHAR,
+    site                VARCHAR,
     criado_em           TIMESTAMPTZ DEFAULT now()
 );
+
+-- Bancos criados antes desses campos (perfil público da empresa) recebem as colunas aqui.
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS descricao    TEXT;
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS cidade       VARCHAR;
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS area_atuacao VARCHAR;
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS site         VARCHAR;
 
 CREATE TABLE IF NOT EXISTS jovens_aprendizes (
     id                        SERIAL PRIMARY KEY,
@@ -46,10 +56,22 @@ CREATE TABLE IF NOT EXISTS candidaturas (
     UNIQUE (jovem_id, vaga_id)  -- RN07: uma candidatura por vaga
 );
 
+-- Organograma: setores da empresa. A cota é calculada sobre os funcionários
+-- dos setores cujas funções exigem formação profissional (art. 429 da CLT).
+CREATE TABLE IF NOT EXISTS setores (
+    id              SERIAL PRIMARY KEY,
+    empresa_id      INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    nome            VARCHAR NOT NULL,
+    funcionarios    INTEGER NOT NULL CHECK (funcionarios >= 0),
+    exige_formacao  BOOLEAN NOT NULL DEFAULT TRUE,
+    criado_em       TIMESTAMPTZ DEFAULT now()
+);
+
 CREATE INDEX IF NOT EXISTS idx_empresas_nome ON empresas (nome);
 CREATE INDEX IF NOT EXISTS idx_jovens_nome   ON jovens_aprendizes (nome);
 CREATE INDEX IF NOT EXISTS idx_vagas_titulo  ON vagas (titulo);
 CREATE INDEX IF NOT EXISTS idx_vagas_empresa ON vagas (empresa_id);
+CREATE INDEX IF NOT EXISTS idx_setores_empresa ON setores (empresa_id);
 
 -- Bloqueia o acesso público pela API automática do Supabase.
 -- A API do Empregae conecta como dono das tabelas e não é afetada.
@@ -57,3 +79,4 @@ ALTER TABLE empresas          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE jovens_aprendizes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE vagas             ENABLE ROW LEVEL SECURITY;
 ALTER TABLE candidaturas      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE setores           ENABLE ROW LEVEL SECURITY;

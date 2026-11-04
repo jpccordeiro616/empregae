@@ -11,7 +11,7 @@ empregae/
 │   ├── database.py     conexão com o banco (lê DATABASE_URL do .env)
 │   ├── auth.py         senhas (bcrypt) e login com token JWT
 │   ├── schema.sql      criação das tabelas em SQL (rodar no Supabase)
-│   ├── models.py       tabelas: empresas, jovens_aprendizes, vagas, candidaturas
+│   ├── models.py       tabelas: empresas, jovens_aprendizes, vagas, candidaturas, setores
 │   ├── matcher.py      filtro inteligente (TF-IDF + similaridade de cosseno)
 │   ├── tests/          testes automatizados (pytest)
 │   └── .env.example    modelo das variáveis de ambiente
@@ -56,8 +56,8 @@ Acesse:
 | Página inicial | Apresentação, como funciona, público, resumo da Lei da Aprendizagem |
 | Entrar | Login de jovem ou empresa (a sessão fica salva no navegador) |
 | Cadastro de jovem / empresa | Formulários com validação e mensagens de erro |
-| Painel do jovem | Vagas recomendadas e busca, candidaturas com status, mensagens (prévia), perfil com currículo e vídeo |
-| Painel da empresa | Nova vaga, cota e candidatos compatíveis (em evolução na Semana 7) |
+| Painel do jovem | Vagas recomendadas e busca, candidaturas com status, perfil das empresas, mensagens (prévia), perfil com currículo e vídeo |
+| Painel da empresa | Candidaturas recebidas (com status), candidatos compatíveis por vaga, gestão de vagas, organograma com cálculo automático da cota e dados da empresa |
 
 ## Testes
 

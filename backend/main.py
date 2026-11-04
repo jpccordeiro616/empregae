@@ -44,6 +44,17 @@ def _normalizar_email(email: str) -> str:
         raise ValueError("E-mail inválido.")
     return email
 
+def _normalizar_site(site: str | None) -> str | None:
+    if site is None or not site.strip():
+        return None
+    site = site.strip()
+    if not re.match(r"https?://", site, re.IGNORECASE):
+        site = "https://" + site
+    # Só http/https: impede links como "javascript:" no perfil público.
+    if not re.fullmatch(r"https?://[^\s/]+\.[^\s]+", site, re.IGNORECASE):
+        raise ValueError("Site inválido. Ex: www.suaempresa.com.br")
+    return site
+
 def _normalizar_cnpj(cnpj: str | None) -> str | None:
     if cnpj is None:
         return None
@@ -54,6 +65,7 @@ def _normalizar_cnpj(cnpj: str | None) -> str | None:
 
 Email = Annotated[str, AfterValidator(_normalizar_email)]
 Cnpj = Annotated[str | None, AfterValidator(_normalizar_cnpj)]
+Site = Annotated[str | None, AfterValidator(_normalizar_site)]
 
 class JovemCriar(BaseModel):
     nome: str = Field(min_length=2)
@@ -82,6 +94,10 @@ class EmpresaAtualizar(BaseModel):
     nome: str | None = Field(default=None, min_length=2)
     cnpj: Cnpj = None
     total_funcionarios: int | None = Field(default=None, ge=0)
+    descricao: str | None = Field(default=None, max_length=2000)
+    cidade: str | None = Field(default=None, max_length=100)
+    area_atuacao: str | None = Field(default=None, max_length=100)
+    site: Site = None
 
 class Login(BaseModel):
     email: str
@@ -100,6 +116,14 @@ class VagaAtualizar(BaseModel):
 class CandidaturaAtualizar(BaseModel):
     status: Literal["pendente", "em_analise", "contratado", "recusado"]
 
+class SetorEntrada(BaseModel):
+    nome: str = Field(min_length=2, max_length=80)
+    funcionarios: int = Field(ge=0, le=1_000_000)
+    exige_formacao: bool = True
+
+class OrganogramaSalvar(BaseModel):
+    setores: list[SetorEntrada] = Field(max_length=50)
+
 # ---------- Formato das respostas ----------
 
 def perfil_jovem(j: models.JovemAprendiz) -> dict:
@@ -110,7 +134,10 @@ def perfil_jovem(j: models.JovemAprendiz) -> dict:
     }
 
 def perfil_empresa(e: models.Empresa) -> dict:
-    return {"id": e.id, "nome": e.nome, "email": e.email, "cnpj": e.cnpj, "total_funcionarios": e.total_funcionarios}
+    return {
+        "id": e.id, "nome": e.nome, "email": e.email, "cnpj": e.cnpj, "total_funcionarios": e.total_funcionarios,
+        "descricao": e.descricao, "cidade": e.cidade, "area_atuacao": e.area_atuacao, "site": e.site,
+    }
 
 def dados_vaga(v: models.Vaga) -> dict:
     return {
@@ -265,6 +292,18 @@ def _vaga_da_empresa(vaga_id: int, empresa: models.Empresa, db: Session) -> mode
         raise HTTPException(status_code=403, detail="Esta vaga pertence a outra empresa.")
     return vaga
 
+@app.get("/empresas/{empresa_id}/perfil")
+def perfil_publico_empresa(empresa_id: int, db: Session = Depends(get_db)):
+    """Apresentação da empresa para os jovens. Não inclui e-mail, CNPJ, organograma nem cota."""
+    empresa = db.get(models.Empresa, empresa_id)
+    if not empresa:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada.")
+    return {
+        "id": empresa.id, "nome": empresa.nome, "descricao": empresa.descricao, "cidade": empresa.cidade,
+        "area_atuacao": empresa.area_atuacao, "site": empresa.site,
+        "vagas_abertas": [dados_vaga(v) for v in empresa.vagas if v.aberta],
+    }
+
 @app.get("/vagas/{vaga_id}")
 def ver_vaga(vaga_id: int, db: Session = Depends(get_db)):
     vaga = db.get(models.Vaga, vaga_id)
@@ -344,6 +383,31 @@ def cota_aprendizes(empresa: models.Empresa = Depends(empresa_logada), db: Sessi
         "faltam_para_cota_minima": max(0, cota_minima - contratados),
     }
 
+# ---------- Semana 7: organograma ----------
+
+def dados_organograma(empresa: models.Empresa) -> dict:
+    setores = [{"id": s.id, "nome": s.nome, "funcionarios": s.funcionarios, "exige_formacao": s.exige_formacao} for s in empresa.setores]
+    return {
+        "setores": setores,
+        "total_funcionarios": sum(s["funcionarios"] for s in setores),
+        "base_cota": sum(s["funcionarios"] for s in setores if s["exige_formacao"]),
+    }
+
+@app.get("/empresas/me/organograma")
+def ver_organograma(empresa: models.Empresa = Depends(empresa_logada)):
+    return dados_organograma(empresa)
+
+@app.put("/empresas/me/organograma")
+def salvar_organograma(dados: OrganogramaSalvar, empresa: models.Empresa = Depends(empresa_logada), db: Session = Depends(get_db)):
+    """Substitui os setores da empresa. A base da cota (total_funcionarios) passa a ser
+    a soma dos funcionários dos setores que exigem formação profissional."""
+    empresa.setores = [models.Setor(**s.model_dump()) for s in dados.setores]
+    resultado = dados_organograma(empresa)
+    empresa.total_funcionarios = resultado["base_cota"] if dados.setores else None
+    db.commit()
+    db.refresh(empresa)
+    return dados_organograma(empresa)
+
 @app.get("/jovens/me/recomendacoes")
 def vagas_recomendadas(jovem: models.JovemAprendiz = Depends(jovem_logado), db: Session = Depends(get_db)):
     vagas = db.query(models.Vaga).filter(models.Vaga.aberta.is_(True)).all()
@@ -361,6 +425,7 @@ def candidatos_compativeis(empresa: models.Empresa = Depends(empresa_logada), db
         if not vaga.aberta:
             continue
         notas = calcular_compatibilidades(texto_vaga(vaga), [j.descricao for j in jovens])
+        candidatos_da_vaga = {c.jovem_id for c in vaga.candidaturas}
         for jovem, nota in zip(jovens, notas):
             if nota > 0:
                 candidatos.append({
@@ -369,7 +434,11 @@ def candidatos_compativeis(empresa: models.Empresa = Depends(empresa_logada), db
                     "candidato_id": jovem.id,
                     "candidato_nome": jovem.nome,
                     "candidato_email": jovem.email,
+                    "candidato_cidade": jovem.cidade,
                     "candidato_descricao": jovem.descricao,
+                    "curriculo_url": jovem.curriculo_url,
+                    "video_url": jovem.video_url,
+                    "ja_candidatou": jovem.id in candidatos_da_vaga,
                     "compatibilidade": nota,
                 })
     candidatos.sort(key=lambda x: x["compatibilidade"], reverse=True)

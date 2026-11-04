@@ -11,8 +11,13 @@ class Empresa(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     senha_hash = Column(String, nullable=False)
     total_funcionarios = Column(Integer, nullable=True)
+    descricao = Column(Text, nullable=True)
+    cidade = Column(String, nullable=True)
+    area_atuacao = Column(String, nullable=True)
+    site = Column(String, nullable=True)
     criado_em = Column(DateTime(timezone=True), server_default=func.now())
-    vagas = relationship("Vaga", back_populates="empresa")
+    vagas = relationship("Vaga", back_populates="empresa", order_by="Vaga.id.desc()")  # mais recentes primeiro
+    setores = relationship("Setor", back_populates="empresa", cascade="all, delete-orphan", order_by="Setor.id")
 
 class JovemAprendiz(Base):
     __tablename__ = "jovens_aprendizes"
@@ -51,3 +56,14 @@ class Candidatura(Base):
     criado_em = Column(DateTime(timezone=True), server_default=func.now())
     jovem = relationship("JovemAprendiz", back_populates="candidaturas")
     vaga = relationship("Vaga", back_populates="candidaturas")
+
+class Setor(Base):
+    """Linha do organograma: um setor da empresa e quantos funcionários tem."""
+    __tablename__ = "setores"
+    id = Column(Integer, primary_key=True, index=True)
+    empresa_id = Column(Integer, ForeignKey("empresas.id", ondelete="CASCADE"), nullable=False)
+    nome = Column(String, nullable=False)
+    funcionarios = Column(Integer, nullable=False)
+    exige_formacao = Column(Boolean, default=True, nullable=False)
+    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+    empresa = relationship("Empresa", back_populates="setores")

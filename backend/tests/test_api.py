@@ -180,3 +180,65 @@ def test_filtro_ignora_acentos_e_palavras_comuns():
     assert calcular_compatibilidades("atendimento ao público", ["atendimento ao publico"])[0] == 100.0
     assert calcular_compatibilidades("de para com", ["de para com"]) == [0.0]
     assert calcular_compatibilidades("", ["qualquer coisa"]) == [0.0]
+
+# ---------- Semana 7 ----------
+
+def test_organograma_calcula_base_da_cota():
+    empresa = cadastrar_empresa()
+    assert client.get("/empresas/me/organograma", headers=auth(empresa)).json()["setores"] == []
+
+    res = client.put("/empresas/me/organograma", headers=auth(empresa), json={"setores": [
+        {"nome": "Produção", "funcionarios": 30, "exige_formacao": True},
+        {"nome": "Administrativo", "funcionarios": 12, "exige_formacao": True},
+        {"nome": "Diretoria", "funcionarios": 3, "exige_formacao": False},
+    ]})
+    assert res.status_code == 200
+    assert (res.json()["total_funcionarios"], res.json()["base_cota"]) == (45, 42)
+
+    cota = client.get("/empresas/me/cota", headers=auth(empresa)).json()
+    assert (cota["total_funcionarios"], cota["cota_minima"], cota["cota_maxima"]) == (42, 3, 6)  # 42 × 5% = 2,1 → 3
+
+    # Salvar de novo substitui os setores anteriores
+    res = client.put("/empresas/me/organograma", headers=auth(empresa), json={"setores": [{"nome": "Loja", "funcionarios": 20}]})
+    assert len(res.json()["setores"]) == 1
+    assert client.get("/empresas/me/cota", headers=auth(empresa)).json()["cota_minima"] == 1
+
+def test_organograma_validacoes_e_permissao():
+    empresa = cadastrar_empresa()
+    ruim = client.put("/empresas/me/organograma", headers=auth(empresa), json={"setores": [{"nome": "X", "funcionarios": -1}]})
+    assert ruim.status_code == 422
+    assert client.put("/empresas/me/organograma", headers=auth(cadastrar_jovem()), json={"setores": []}).status_code == 403
+
+def test_candidatos_compativeis_trazem_curriculo_e_candidatura():
+    empresa = cadastrar_empresa()
+    vaga_id = criar_vaga(empresa)
+    jovem = cadastrar_jovem()
+    client.post("/jovens/me/curriculo", files={"arquivo": ("cv.pdf", b"%PDF-1.4", "application/pdf")}, headers=auth(jovem))
+    client.post(f"/vagas/{vaga_id}/candidaturas", headers=auth(jovem))
+
+    candidato = client.get("/empresas/me/candidatos", headers=auth(empresa)).json()[0]
+    assert candidato["ja_candidatou"] is True and candidato["curriculo_url"].startswith("/arquivos/")
+
+def test_perfil_publico_da_empresa():
+    empresa = cadastrar_empresa(cnpj="12345678000190", total_funcionarios=40)
+    res = client.patch("/empresas/me", headers=auth(empresa), json={
+        "descricao": "Rede de supermercados do Recife.", "cidade": "Recife - PE",
+        "area_atuacao": "Varejo", "site": "www.bompreco.com.br",
+    })
+    assert res.json()["site"] == "https://www.bompreco.com.br"
+    vaga_aberta = criar_vaga(empresa)
+    vaga_fechada = criar_vaga(empresa, titulo="Vaga encerrada")
+    client.patch(f"/vagas/{vaga_fechada}", json={"aberta": False}, headers=auth(empresa))
+
+    empresa_id = client.get("/empresas/me", headers=auth(empresa)).json()["id"]
+    perfil = client.get(f"/empresas/{empresa_id}/perfil").json()
+    assert perfil["area_atuacao"] == "Varejo"
+    assert [v["id"] for v in perfil["vagas_abertas"]] == [vaga_aberta]
+    for privado in ("email", "cnpj", "total_funcionarios", "senha_hash"):
+        assert privado not in perfil
+    assert client.get("/empresas/999/perfil").status_code == 404
+
+def test_site_da_empresa_so_aceita_http():
+    empresa = cadastrar_empresa()
+    assert client.patch("/empresas/me", headers=auth(empresa), json={"site": "javascript:alert(1)"}).status_code == 422
+    assert client.patch("/empresas/me", headers=auth(empresa), json={"site": ""}).json()["site"] is None
