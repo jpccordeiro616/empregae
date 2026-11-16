@@ -72,8 +72,9 @@ Os testes usam um banco SQLite em memória e não alteram o banco PostgreSQL.
 
 O Supabase pausa projetos gratuitos após ~7 dias sem atividade. O workflow
 [`.github/workflows/supabase-keepalive.yml`](.github/workflows/supabase-keepalive.yml)
-faz uma consulta no banco a cada 3 dias. Ele precisa do secret `DATABASE_URL`
-em *Settings → Secrets and variables → Actions* do repositório.
+acessa a API REST do Supabase e faz uma consulta no banco todos os dias (só a
+consulta SQL não bastou). Ele precisa dos secrets `DATABASE_URL` e
+`SUPABASE_PUBLISHABLE_KEY` em *Settings → Secrets and variables → Actions*.
 
 Se o projeto pausar mesmo assim: Supabase → projeto → **Restore project**.
 
