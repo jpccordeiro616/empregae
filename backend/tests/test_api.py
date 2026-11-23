@@ -242,3 +242,45 @@ def test_site_da_empresa_so_aceita_http():
     empresa = cadastrar_empresa()
     assert client.patch("/empresas/me", headers=auth(empresa), json={"site": "javascript:alert(1)"}).status_code == 422
     assert client.patch("/empresas/me", headers=auth(empresa), json={"site": ""}).json()["site"] is None
+
+# ---------- Semana 8: jornada completa de ponta a ponta ----------
+
+def test_jornada_completa_ponta_a_ponta():
+    """Mesmo roteiro de docs/roteiro-de-testes.md: empresa → vagas → jovem → match → candidatura → contratação → cota."""
+    # 1. Empresa se cadastra e preenche o organograma
+    empresa = cadastrar_empresa()
+    org = client.put("/empresas/me/organograma", headers=auth(empresa), json={"setores": [
+        {"nome": "Loja", "funcionarios": 25, "exige_formacao": True},
+        {"nome": "Diretoria", "funcionarios": 2, "exige_formacao": False},
+    ]}).json()
+    assert org["base_cota"] == 25
+
+    # 2. Publica duas vagas diferentes; elas aparecem na lista pública (página inicial)
+    criar_vaga(empresa, "Auxiliar de Logística", "separar mercadorias no estoque e conferir notas fiscais")
+    vaga_adm = criar_vaga(empresa, "Assistente Administrativo", "organizar documentos e arquivos do escritório")
+    assert len(client.get("/vagas/").json()) == 2
+
+    # 3. Jovem se cadastra, sai e entra de novo pelo login
+    cadastrar_jovem(email="joana@ex.com", descricao="Gosto de organizar documentos, arquivos e rotinas de escritório")
+    jovem = client.post("/login", json={"email": "joana@ex.com", "senha": "senha123", "tipo": "jovem"}).json()["token"]
+
+    # 4. Filtro inteligente recomenda primeiro a vaga administrativa
+    recomendacoes = client.get("/jovens/me/recomendacoes", headers=auth(jovem)).json()
+    assert recomendacoes[0]["id"] == vaga_adm
+
+    # 5. Jovem vê o perfil público da empresa e se candidata
+    perfil = client.get(f"/empresas/{recomendacoes[0]['empresa_id']}/perfil").json()
+    assert len(perfil["vagas_abertas"]) == 2
+    assert client.post(f"/vagas/{vaga_adm}/candidaturas", headers=auth(jovem)).status_code == 201
+
+    # 6. Empresa recebe a candidatura e contrata
+    recebida = client.get("/empresas/me/candidaturas", headers=auth(empresa)).json()[0]
+    assert recebida["candidato"]["email"] == "joana@ex.com" and recebida["status"] == "pendente"
+    client.patch(f"/candidaturas/{recebida['id']}", json={"status": "contratado"}, headers=auth(empresa))
+
+    # 7. Cota: 25 × 5% = 1,25 → 2 aprendizes; 1 contratado, falta 1
+    cota = client.get("/empresas/me/cota", headers=auth(empresa)).json()
+    assert (cota["cota_minima"], cota["contratados"], cota["faltam_para_cota_minima"]) == (2, 1, 1)
+
+    # 8. Jovem vê que foi contratado
+    assert client.get("/jovens/me/candidaturas", headers=auth(jovem)).json()[0]["status"] == "contratado"

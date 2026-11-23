@@ -16,8 +16,18 @@ empregae/
 │   ├── tests/          testes automatizados (pytest)
 │   └── .env.example    modelo das variáveis de ambiente
 ├── frontend/           HTML, CSS e JavaScript puro
+│   ├── index.html
+│   ├── style.css       temas claro/escuro e responsividade
+│   └── js/
+│       ├── utils.js    funções pequenas (escape de HTML, avisos, datas)
+│       ├── api.js      comunicação com o backend via fetch, sessão e arquivos
+│       ├── publico.js  página inicial, login e cadastros
+│       ├── jovem.js    painel do jovem aprendiz
+│       ├── empresa.js  painel da empresa
+│       └── app.js      estado, navegação e inicialização (carregado por último)
 └── docs/
-    └── requisitos.md   levantamento de requisitos e regras de negócio
+    ├── requisitos.md        levantamento de requisitos e regras de negócio
+    └── roteiro-de-testes.md jornada completa passo a passo (teste e demonstração)
 ```
 
 ## Como rodar localmente
@@ -53,7 +63,7 @@ Acesse:
 
 | Tela | O que tem |
 |---|---|
-| Página inicial | Apresentação, como funciona, público, resumo da Lei da Aprendizagem |
+| Página inicial | Apresentação, vagas abertas em tempo real, como funciona, público, resumo da Lei da Aprendizagem |
 | Entrar | Login de jovem ou empresa (a sessão fica salva no navegador) |
 | Cadastro de jovem / empresa | Formulários com validação e mensagens de erro |
 | Painel do jovem | Vagas recomendadas e busca, candidaturas com status, perfil das empresas, mensagens (prévia), perfil com currículo e vídeo |
@@ -67,6 +77,7 @@ pytest
 ```
 
 Os testes usam um banco SQLite em memória e não alteram o banco PostgreSQL.
+Para testar pelas telas, siga o [roteiro de testes](docs/roteiro-de-testes.md).
 
 ## Supabase ativo (plano gratuito)
 
