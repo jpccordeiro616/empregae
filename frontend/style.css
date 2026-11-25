@@ -326,6 +326,17 @@ input[type="file"].form-control { padding: 0.55rem; font-size: 0.85rem; }
 .vaga-publica .descricao { flex: 1; }
 .vaga-publica .btn { align-self: flex-start; }
 
+/* ---------- Semana 10: responsável, privacidade e exclusão de conta ---------- */
+
+.bloco-responsavel { border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 1rem; margin-bottom: 1.15rem; }
+.bloco-responsavel legend { padding: 0 0.4rem; font-weight: 600; font-size: 0.9rem; display: flex; align-items: center; gap: 6px; }
+.hint-erro { color: var(--danger-text); }
+.btn-perigo { background: transparent; border-color: var(--alert-error-border); color: var(--danger-text); }
+.btn-perigo:hover:not(:disabled) { background: var(--danger-soft); }
+.politica h3 { margin-top: 1.5rem; }
+.politica ul { margin: 0.5rem 0 0 1.2rem; }
+.politica li, .politica p { margin-bottom: 0.4rem; color: var(--text-body); }
+
 /* ---------- Painel da empresa ---------- */
 
 .form-control-sm { padding: 0.45rem 0.6rem; font-size: 0.85rem; width: auto; }

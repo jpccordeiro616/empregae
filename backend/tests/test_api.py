@@ -28,10 +28,19 @@ app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
 
 @pytest.fixture(autouse=True)
-def banco_limpo(tmp_path, monkeypatch):
+def banco_limpo():
     models.Base.metadata.drop_all(bind=engine)
     models.Base.metadata.create_all(bind=engine)
-    monkeypatch.setattr(main, "UPLOADS_DIR", tmp_path)
+
+def nascido_ha(anos, dias_a_mais=0):
+    """Data de nascimento de quem fez `anos` anos hoje (menos `dias_a_mais` dias de vida)."""
+    from datetime import date, timedelta
+    hoje = date.today()
+    try:
+        nascimento = hoje.replace(year=hoje.year - anos)
+    except ValueError:  # 29/02
+        nascimento = hoje.replace(year=hoje.year - anos, day=28)
+    return (nascimento + timedelta(days=dias_a_mais)).isoformat()
 
 def auth(token):
     return {"Authorization": f"Bearer {token}"}
@@ -39,7 +48,7 @@ def auth(token):
 def cadastrar_jovem(email="ana@ex.com", descricao="gosto de organizar documentos e rotinas administrativas"):
     res = client.post("/jovens/", json={
         "nome": "Ana", "email": email, "senha": "senha123", "descricao": descricao,
-        "aceitou_lgpd": True, "aceitou_lei_aprendizagem": True,
+        "aceitou_lgpd": True, "aceitou_lei_aprendizagem": True, "data_nascimento": nascido_ha(20),
     })
     assert res.status_code == 201, res.text
     return res.json()["token"]
@@ -62,7 +71,7 @@ def test_saude():
 def test_cadastro_bloqueado_sem_aceite_lgpd():
     res = client.post("/jovens/", json={
         "nome": "Bia", "email": "bia@ex.com", "senha": "senha123", "descricao": "x",
-        "aceitou_lgpd": False, "aceitou_lei_aprendizagem": True,
+        "aceitou_lgpd": False, "aceitou_lei_aprendizagem": True, "data_nascimento": nascido_ha(20),
     })
     assert res.status_code == 400
 
@@ -77,7 +86,7 @@ def test_email_duplicado_retorna_409():
     cadastrar_jovem()
     res = client.post("/jovens/", json={
         "nome": "Ana 2", "email": "ANA@ex.com ", "senha": "senha123", "descricao": "x",
-        "aceitou_lgpd": True, "aceitou_lei_aprendizagem": True,
+        "aceitou_lgpd": True, "aceitou_lei_aprendizagem": True, "data_nascimento": nascido_ha(20),
     })
     assert res.status_code == 409
 
@@ -103,7 +112,8 @@ def test_rotas_protegidas():
 def test_atualizar_perfis():
     token = cadastrar_jovem()
     res = client.patch("/jovens/me", json={"cidade": "Recife", "data_nascimento": "2008-05-10"}, headers=auth(token))
-    assert res.json()["cidade"] == "Recife" and res.json()["data_nascimento"] == "2008-05-10"
+    # A data de nascimento é ignorada na edição: ela define as regras de idade do cadastro.
+    assert res.json()["cidade"] == "Recife" and res.json()["data_nascimento"] == nascido_ha(20)
 
     token_empresa = cadastrar_empresa()
     res = client.patch("/empresas/me", json={"cnpj": "12.345.678/0001-90", "total_funcionarios": 50}, headers=auth(token_empresa))
@@ -119,7 +129,10 @@ def test_upload_curriculo_e_video():
     assert client.get(url).status_code == 401
     outro_jovem = cadastrar_jovem(email="outro@ex.com")
     assert client.get(url, headers=auth(outro_jovem)).status_code == 404
-    assert client.get(url, headers=auth(cadastrar_empresa())).status_code == 200
+    empresa = cadastrar_empresa()
+    assert client.get(url, headers=auth(empresa)).status_code == 404  # ainda não se candidatou
+    client.post(f"/vagas/{criar_vaga(empresa)}/candidaturas", headers=auth(token))
+    assert client.get(url, headers=auth(empresa)).status_code == 200
 
     errado = client.post("/jovens/me/curriculo", files={"arquivo": ("x.exe", b"MZ", "application/octet-stream")}, headers=auth(token))
     assert errado.status_code == 400
@@ -284,3 +297,134 @@ def test_jornada_completa_ponta_a_ponta():
 
     # 8. Jovem vê que foi contratado
     assert client.get("/jovens/me/candidaturas", headers=auth(jovem)).json()[0]["status"] == "contratado"
+
+# ---------- Semana 9: casos-limite encontrados nos testes de integração ----------
+
+def test_senha_longa_nao_derruba_cadastro_nem_login():
+    longa = "á" * 40  # 80 bytes: acima do limite do bcrypt
+    res = client.post("/jovens/", json={
+        "nome": "Ana", "email": "ana@ex.com", "senha": longa, "descricao": "x",
+        "aceitou_lgpd": True, "aceitou_lei_aprendizagem": True, "data_nascimento": nascido_ha(20),
+    })
+    assert res.status_code == 422
+    cadastrar_jovem()
+    assert client.post("/login", json={"email": "ana@ex.com", "senha": longa, "tipo": "jovem"}).status_code == 401
+
+def test_sessao_de_usuario_apagado_pede_novo_login():
+    token = cadastrar_jovem()
+    db = TestingSession()
+    db.query(models.JovemAprendiz).delete()
+    db.commit()
+    db.close()
+    res = client.get("/jovens/me", headers=auth(token))
+    assert res.status_code == 401  # o frontend desloga e volta para a página inicial
+
+# ---------- Semana 10: validações de negócio e LGPD / ECA Digital ----------
+
+def jovem_payload(**mudancas):
+    base = {"nome": "Bia Santos", "email": "bia@ex.com", "senha": "senha123", "descricao": "organizada",
+            "aceitou_lgpd": True, "aceitou_lei_aprendizagem": True, "data_nascimento": nascido_ha(20)}
+    return {**base, **mudancas}
+
+def test_idade_minima_e_maxima_do_aprendiz():
+    menor_de_14 = client.post("/jovens/", json=jovem_payload(data_nascimento=nascido_ha(14, dias_a_mais=1)))
+    assert menor_de_14.status_code == 400 and "14 anos" in menor_de_14.json()["detail"]
+    com_25 = client.post("/jovens/", json=jovem_payload(data_nascimento=nascido_ha(25)))
+    assert com_25.status_code == 400 and "24 anos" in com_25.json()["detail"]
+    futuro = client.post("/jovens/", json=jovem_payload(data_nascimento="2999-01-01"))
+    assert futuro.status_code == 400
+    assert client.post("/jovens/", json=jovem_payload(data_nascimento=nascido_ha(24))).status_code == 201
+
+def test_pessoa_com_deficiencia_nao_tem_idade_maxima():
+    res = client.post("/jovens/", json=jovem_payload(data_nascimento=nascido_ha(30), pcd=True))
+    assert res.status_code == 201
+
+def test_menor_de_idade_precisa_de_responsavel():
+    sem = client.post("/jovens/", json=jovem_payload(data_nascimento=nascido_ha(15)))
+    assert sem.status_code == 400 and "responsável" in sem.json()["detail"]
+    sem_aceite = client.post("/jovens/", json=jovem_payload(
+        data_nascimento=nascido_ha(15), responsavel_nome="Maria Santos", responsavel_email="maria@ex.com"))
+    assert sem_aceite.status_code == 400
+    ok = client.post("/jovens/", json=jovem_payload(
+        data_nascimento=nascido_ha(15), responsavel_nome="Maria Santos", responsavel_email="MARIA@ex.com", aceite_responsavel=True))
+    assert ok.status_code == 201
+    perfil = client.get("/jovens/me", headers=auth(ok.json()["token"])).json()
+    assert (perfil["idade"], perfil["responsavel_email"]) == (15, "maria@ex.com")
+
+def test_maior_de_idade_nao_guarda_dados_de_responsavel():
+    res = client.post("/jovens/", json=jovem_payload(responsavel_nome="Fulano", responsavel_email="f@ex.com", aceite_responsavel=True))
+    perfil = client.get("/jovens/me", headers=auth(res.json()["token"])).json()
+    assert perfil["responsavel_nome"] is None and perfil["responsavel_email"] is None
+
+def test_empresa_nao_ve_dados_sensiveis_do_candidato():
+    empresa = cadastrar_empresa()
+    vaga = criar_vaga(empresa)
+    jovem = client.post("/jovens/", json=jovem_payload(
+        data_nascimento=nascido_ha(16), pcd=True, descricao="gosto de organizar documentos e rotinas administrativas",
+        responsavel_nome="Maria Santos", responsavel_email="maria@ex.com", aceite_responsavel=True)).json()["token"]
+
+    # Antes da candidatura: só primeiro nome e descrição
+    compat = client.get("/empresas/me/candidatos", headers=auth(empresa)).json()[0]
+    assert compat["candidato_nome"] == "Bia" and compat["candidato_email"] is None and compat["contato_liberado"] is False
+
+    # Depois da candidatura: contato liberado, mas sem nascimento, PcD ou responsável
+    client.post(f"/vagas/{vaga}/candidaturas", headers=auth(jovem))
+    compat = client.get("/empresas/me/candidatos", headers=auth(empresa)).json()[0]
+    assert compat["candidato_nome"] == "Bia Santos" and compat["candidato_email"] == "bia@ex.com"
+    candidato = client.get("/empresas/me/candidaturas", headers=auth(empresa)).json()[0]["candidato"]
+    assert candidato["idade"] == 16
+    for sensivel in ("data_nascimento", "pcd", "responsavel_nome", "responsavel_email"):
+        assert sensivel not in candidato
+
+def test_empresas_dispensadas_da_cota():
+    for porte in ("me", "epp", "esfl"):
+        token = cadastrar_empresa(email=f"{porte}@ex.com", porte=porte, total_funcionarios=40)
+        cota = client.get("/empresas/me/cota", headers=auth(token)).json()
+        assert cota["obrigatoria"] is False and cota["cota_minima"] == 0 and cota["motivo"]
+    normal = client.get("/empresas/me/cota", headers=auth(cadastrar_empresa(total_funcionarios=40))).json()
+    assert normal["obrigatoria"] is True and (normal["cota_minima"], normal["cota_maxima"]) == (2, 6)
+    assert client.post("/empresas/", json={"nome": "X Ltda", "email": "x@ex.com", "senha": "senha123", "porte": "grande"}).status_code == 422
+
+def test_excluir_conta_do_jovem():
+    empresa = cadastrar_empresa()
+    vaga = criar_vaga(empresa)
+    jovem = cadastrar_jovem()
+    client.post("/jovens/me/curriculo", files={"arquivo": ("cv.pdf", b"%PDF-1.4", "application/pdf")}, headers=auth(jovem))
+    client.post(f"/vagas/{vaga}/candidaturas", headers=auth(jovem))
+
+    assert client.delete("/jovens/me", headers=auth(jovem)).status_code == 200
+    assert client.get("/jovens/me", headers=auth(jovem)).status_code == 401
+    assert client.get("/empresas/me/candidaturas", headers=auth(empresa)).json() == []
+    assert client.post("/login", json={"email": "ana@ex.com", "senha": "senha123", "tipo": "jovem"}).status_code == 401
+
+def test_excluir_conta_da_empresa():
+    empresa = cadastrar_empresa()
+    vaga = criar_vaga(empresa)
+    client.put("/empresas/me/organograma", headers=auth(empresa), json={"setores": [{"nome": "Loja", "funcionarios": 10}]})
+    jovem = cadastrar_jovem()
+    client.post(f"/vagas/{vaga}/candidaturas", headers=auth(jovem))
+
+    assert client.delete("/empresas/me", headers=auth(empresa)).status_code == 200
+    assert client.get("/vagas/").json() == []
+    assert client.get("/jovens/me/candidaturas", headers=auth(jovem)).json() == []
+
+# ---------- Semana 11: arquivos guardados no banco ----------
+
+def test_arquivos_ficam_no_banco_e_saem_com_a_conta():
+    jovem = cadastrar_jovem()
+    url = client.post("/jovens/me/curriculo", files={"arquivo": ("cv.pdf", b"%PDF-1.4 v1", "application/pdf")}, headers=auth(jovem)).json()["curriculo_url"]
+    db = TestingSession()
+    assert db.query(models.Arquivo).count() == 1
+    # Trocar o currículo apaga o antigo
+    nova = client.post("/jovens/me/curriculo", files={"arquivo": ("cv.pdf", b"%PDF-1.4 v2", "application/pdf")}, headers=auth(jovem)).json()["curriculo_url"]
+    assert db.query(models.Arquivo).count() == 1 and client.get(url, headers=auth(jovem)).status_code == 404
+    assert client.get(nova, headers=auth(jovem)).content == b"%PDF-1.4 v2"
+    client.delete("/jovens/me", headers=auth(jovem))
+    assert db.query(models.Arquivo).count() == 0
+    db.close()
+
+def test_video_acima_de_20mb_e_recusado():
+    jovem = cadastrar_jovem()
+    grande = b"0" * (20 * 1024 * 1024 + 1)
+    res = client.post("/jovens/me/video", files={"arquivo": ("v.mp4", grande, "video/mp4")}, headers=auth(jovem))
+    assert res.status_code == 400 and "20 MB" in res.json()["detail"]

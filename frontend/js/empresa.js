@@ -101,6 +101,17 @@ function renderPainelEmpresa() {
 
 function renderResumoCota() {
     const c = state.empresa.cota;
+    if (c.obrigatoria === false) {
+        return `
+            <div class="completude">
+                <div class="row-between small">
+                    <span><strong>Cota não obrigatória</strong></span>
+                    <span class="badge badge-neutral">Dispensada</span>
+                </div>
+                <p class="hint">${esc(c.motivo)} Contratar aprendizes continua possível. Aprendizes contratados: ${c.contratados}.</p>
+            </div>
+        `;
+    }
     if (!c.total_funcionarios) {
         return `
             <div class="completude">
@@ -125,6 +136,9 @@ function renderResumoCota() {
 // ---------- Ações comuns sobre candidatos ----------
 
 function renderAcoesCandidato(candidato) {
+    if (!candidato.email) {
+        return `<span class="small muted"><i data-lucide="lock"></i> Contato e arquivos liberados quando o jovem se candidatar a uma vaga sua.</span>`;
+    }
     return `
         ${candidato.curriculo_url ? `<button class="btn btn-ghost btn-sm" onclick="abrirEmNovaAba('${esc(candidato.curriculo_url)}')"><i data-lucide="file-text"></i> Currículo</button>` : ''}
         ${candidato.video_url ? `<button class="btn btn-ghost btn-sm" onclick="abrirEmNovaAba('${esc(candidato.video_url)}')"><i data-lucide="video"></i> Vídeo</button>` : ''}
@@ -180,6 +194,7 @@ function renderAbaCandidaturasRecebidas() {
                             </div>
                             <div class="meta">
                                 <span><i data-lucide="briefcase"></i> ${esc(c.vaga_titulo)}</span>
+                                ${c.candidato.idade !== null ? `<span><i data-lucide="cake"></i> ${Number(c.candidato.idade)} anos</span>` : ''}
                                 ${c.candidato.cidade ? `<span><i data-lucide="map-pin"></i> ${esc(c.candidato.cidade)}</span>` : ''}
                                 <span><i data-lucide="calendar"></i> ${formatarData(c.criado_em)}</span>
                             </div>
@@ -388,6 +403,7 @@ async function alternarVaga(vagaId, aberta) {
 
 // Mesma regra do backend: mínimo de 5% (fração arredonda para cima) e máximo de 15%.
 function calcularCota(base) {
+    if (state.empresa.cota && state.empresa.cota.obrigatoria === false) return {minima: 0, maxima: '—'};
     const minima = Math.floor((base * 5 + 99) / 100);
     return {minima, maxima: Math.max(minima, Math.floor(base * 15 / 100))};
 }
@@ -439,6 +455,7 @@ function renderAbaOrganograma() {
             <div class="stack">
                 <div class="glass-panel">
                     <h3>Cálculo da cota</h3>
+                    ${e.cota.obrigatoria === false ? `<div class="alert alert-info"><i data-lucide="info"></i><span>${esc(e.cota.motivo)} A contratação de aprendizes continua possível.</span></div>` : ''}
                     <div class="stats">
                         <div class="stat"><strong id="org_total">${t.total}</strong><span>Funcionários no total</span></div>
                         <div class="stat"><strong id="org_base">${t.base}</strong><span>Em funções que exigem formação</span></div>
@@ -446,14 +463,15 @@ function renderAbaOrganograma() {
                         <div class="stat"><strong id="org_max">${t.maxima}</strong><span>Limite máximo (15%)</span></div>
                     </div>
                     <p class="hint" style="margin-top: 1rem;">
-                        Art. 429 da CLT: de 5% a 15% dos trabalhadores em funções que exigem formação profissional.
-                        Frações arredondam para cima no mínimo (ex.: 42 × 5% = 2,1 → 3 aprendizes).
+                        CLT, art. 429, e Decreto 9.579/2018, art. 51: de 5% a 15% dos trabalhadores em funções que exigem
+                        formação profissional. Frações arredondam para cima (ex.: 42 × 5% = 2,1 → 3 aprendizes).
+                        ME, EPP e entidades sem fins lucrativos de educação profissional são dispensadas.
                         O cálculo é atualizado enquanto você digita; clique em "Salvar organograma" para registrar.
                     </p>
                     <div class="alert alert-info" style="margin: 1rem 0 0;">
                         <i data-lucide="users"></i>
                         <span>Aprendizes contratados pelo Empregae: <strong>${e.cota.contratados}</strong>.
-                        ${e.cota.total_funcionarios ? (e.cota.faltam_para_cota_minima ? `Faltam <strong>${e.cota.faltam_para_cota_minima}</strong> para a cota mínima registrada.` : 'A cota mínima registrada está cumprida.') : 'Salve o organograma para registrar a cota.'}</span>
+                        ${e.cota.obrigatoria === false ? '' : e.cota.total_funcionarios ? (e.cota.faltam_para_cota_minima ? `Faltam <strong>${e.cota.faltam_para_cota_minima}</strong> para a cota mínima registrada.` : 'A cota mínima registrada está cumprida.') : 'Salve o organograma para registrar a cota.'}</span>
                     </div>
                 </div>
                 ${renderDadosEmpresa()}
@@ -513,6 +531,10 @@ function renderDadosEmpresa() {
                     <label for="emp_nome">Nome da empresa</label>
                     <input type="text" id="emp_nome" class="form-control" value="${esc(u.nome)}" required>
                 </div>
+                <div class="form-group">
+                    <label for="emp_porte">Porte</label>
+                    <select id="emp_porte" class="form-control">${opcoesPorte(u.porte || 'demais')}</select>
+                </div>
                 <div class="form-row">
                     <div class="form-group">
                         <label for="emp_cnpj">CNPJ</label>
@@ -546,6 +568,7 @@ function renderDadosEmpresa() {
                 <button type="submit" class="btn btn-primary btn-sm"><i data-lucide="save"></i> Salvar dados</button>
             </form>
         </div>
+        ${renderExcluirConta('empresa')}
     `;
 }
 
@@ -562,7 +585,9 @@ async function salvarDadosEmpresa(e) {
             cidade: document.getElementById('emp_cidade').value.trim() || null,
             site: document.getElementById('emp_site').value.trim() || null,
             descricao: document.getElementById('emp_desc').value.trim() || null,
+            porte: document.getElementById('emp_porte').value,
         }});
+        await recarregarEmpresa('cota');  // o porte muda a obrigatoriedade da cota
         state.erroForm = '';
         toast('Dados da empresa atualizados.');
         render();

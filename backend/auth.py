@@ -18,7 +18,12 @@ bearer = HTTPBearer(auto_error=False)
 def gerar_hash(senha: str) -> str:
     return bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
 
+# O bcrypt só aceita até 72 bytes (acentos ocupam 2 bytes cada).
+SENHA_MAX_BYTES = 72
+
 def senha_confere(senha: str, senha_hash: str) -> bool:
+    if len(senha.encode()) > SENHA_MAX_BYTES:
+        return False
     return bcrypt.checkpw(senha.encode(), senha_hash.encode())
 
 def criar_token(usuario_id: int, tipo: str) -> str:
@@ -41,14 +46,18 @@ def usuario_logado(credenciais: HTTPAuthorizationCredentials | None = Depends(be
 
 def jovem_logado(credenciais: HTTPAuthorizationCredentials | None = Depends(bearer), db: Session = Depends(get_db)) -> models.JovemAprendiz:
     usuario_id, tipo = _ler_token(credenciais)
-    jovem = db.get(models.JovemAprendiz, usuario_id) if tipo == "jovem" else None
-    if not jovem:
+    if tipo != "jovem":
         raise HTTPException(status_code=403, detail="Acesso permitido apenas para jovens aprendizes.")
+    jovem = db.get(models.JovemAprendiz, usuario_id)
+    if not jovem:  # conta excluída ou banco zerado: a sessão não vale mais
+        raise HTTPException(status_code=401, detail="Sessão inválida. Faça login novamente.")
     return jovem
 
 def empresa_logada(credenciais: HTTPAuthorizationCredentials | None = Depends(bearer), db: Session = Depends(get_db)) -> models.Empresa:
     usuario_id, tipo = _ler_token(credenciais)
-    empresa = db.get(models.Empresa, usuario_id) if tipo == "empresa" else None
-    if not empresa:
+    if tipo != "empresa":
         raise HTTPException(status_code=403, detail="Acesso permitido apenas para empresas.")
+    empresa = db.get(models.Empresa, usuario_id)
+    if not empresa:  # conta excluída ou banco zerado: a sessão não vale mais
+        raise HTTPException(status_code=401, detail="Sessão inválida. Faça login novamente.")
     return empresa

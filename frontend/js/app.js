@@ -30,8 +30,14 @@ function navigate(view) {
     state.view = view;
     state.erroForm = '';
     if (view === 'landing') state.vagasPublicas = null;  // recarrega as vagas a cada visita
+    // A política de privacidade tem endereço próprio (/#privacidade) para poder ser aberta em nova aba.
+    history.replaceState(null, '', view === 'privacidade' ? '#privacidade' : location.pathname);
     render();
     window.scrollTo(0, 0);
+}
+
+function irParaInicio() {
+    if (state.usuario) irParaPainel(); else navigate('landing');
 }
 
 function irParaPainel() {
@@ -90,6 +96,7 @@ function render() {
         'cadastro-empresa': renderCadastroEmpresa,
         'painel-jovem': renderPainelJovem,
         'painel-empresa': renderPainelEmpresa,
+        'privacidade': renderPrivacidade,
     };
     app.innerHTML = renderNavbar() + `<main>${(views[state.view] || renderLanding)()}</main>` + renderFooter();
     if (window.lucide) lucide.createIcons();
@@ -125,6 +132,7 @@ function renderFooter() {
     return `
         <footer class="footer">
             Empregae · Conectando jovens aprendizes e empresas · Lei da Aprendizagem (Lei nº 10.097/2000)
+            · <button class="link-btn" onclick="navigate('privacidade')">Política de privacidade</button>
         </footer>
     `;
 }
@@ -133,17 +141,18 @@ function renderFooter() {
 
 async function iniciarSessao() {
     limparEstado();
+    const abrirPrivacidade = location.hash === '#privacidade';
     const sessao = lerSessao();
     if (sessao && sessao.token) {
         try {
             await entrar(sessao.token, sessao.tipo);
-            return;
         } catch (e) {
             sair();
-            return;
         }
+    } else {
+        navigate('landing');
     }
-    navigate('landing');
+    if (abrirPrivacidade) navigate('privacidade');
 }
 
 window.onload = iniciarSessao;

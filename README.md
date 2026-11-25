@@ -66,8 +66,9 @@ Acesse:
 | Página inicial | Apresentação, vagas abertas em tempo real, como funciona, público, resumo da Lei da Aprendizagem |
 | Entrar | Login de jovem ou empresa (a sessão fica salva no navegador) |
 | Cadastro de jovem / empresa | Formulários com validação e mensagens de erro |
-| Painel do jovem | Vagas recomendadas e busca, candidaturas com status, perfil das empresas, mensagens (prévia), perfil com currículo e vídeo |
-| Painel da empresa | Candidaturas recebidas (com status), candidatos compatíveis por vaga, gestão de vagas, organograma com cálculo automático da cota e dados da empresa |
+| Painel do jovem | Vagas recomendadas e busca, candidaturas com status, perfil das empresas, mensagens (prévia), perfil com currículo e vídeo, excluir conta |
+| Painel da empresa | Candidaturas recebidas (com status), candidatos compatíveis por vaga, gestão de vagas, organograma com cálculo automático da cota (e dispensa para ME/EPP), dados da empresa, excluir conta |
+| Política de privacidade | Dados coletados, quem vê o quê, menores de idade e direitos (LGPD / ECA Digital) |
 
 ## Testes
 
@@ -78,6 +79,29 @@ pytest
 
 Os testes usam um banco SQLite em memória e não alteram o banco PostgreSQL.
 Para testar pelas telas, siga o [roteiro de testes](docs/roteiro-de-testes.md).
+
+## Deploy (Render)
+
+O arquivo [`render.yaml`](render.yaml) configura o deploy:
+
+1. Render → **New → Blueprint** → escolher este repositório.
+2. Colar o `DATABASE_URL` do Supabase quando for pedido → **Apply**.
+3. A `JWT_SECRET` é gerada automaticamente; cada push na `main` atualiza o site.
+
+Antes do primeiro deploy (e sempre que o `schema.sql` mudar), rode o `backend/schema.sql`
+no SQL Editor do Supabase. Currículos e vídeos ficam no próprio banco (tabela `arquivos`),
+porque o disco do Render é apagado a cada reinício.
+
+No plano gratuito o site "dorme" após 15 min sem acesso; o primeiro acesso depois disso
+leva cerca de 1 minuto.
+
+### Zerar o banco depois dos testes
+
+No SQL Editor do Supabase:
+
+```sql
+TRUNCATE arquivos, setores, candidaturas, vagas, jovens_aprendizes, empresas RESTART IDENTITY;
+```
 
 ## Supabase ativo (plano gratuito)
 

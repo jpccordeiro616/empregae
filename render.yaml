@@ -1,0 +1,19 @@
+# Configuração do deploy no Render (Blueprint).
+# Render → New → Blueprint → escolher este repositório.
+services:
+  - type: web
+    name: empregae
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /saude
+    autoDeploy: true            # cada push na main atualiza o site
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.14.3
+      - key: DATABASE_URL       # connection string do Supabase (pedida na criação)
+        sync: false
+      - key: JWT_SECRET         # gerada automaticamente pelo Render
+        generateValue: true

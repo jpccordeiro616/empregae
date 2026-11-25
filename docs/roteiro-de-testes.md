@@ -32,7 +32,7 @@ O mesmo fluxo é verificado automaticamente pela API no teste
 | # | O que fazer | O que deve acontecer |
 |---|---|---|
 | 7 | Abra http://localhost:8000 | Na seção **Vagas abertas agora** aparecem as duas vagas, sem precisar de login. |
-| 8 | **Sou jovem aprendiz**. Em "Sobre você": "Gosto de organizar documentos e arquivos, tenho facilidade com computador e quero trabalhar em escritório." Tente enviar **sem marcar** os termos. | O navegador não deixa enviar sem os aceites da LGPD e da Lei da Aprendizagem. |
+| 8 | **Sou jovem aprendiz**. Data de nascimento de alguém com **20 anos**. Em "Sobre você": "Gosto de organizar documentos e arquivos, tenho facilidade com computador e quero trabalhar em escritório." Tente enviar **sem marcar** os termos. | O navegador não deixa enviar sem os aceites da LGPD e da Lei da Aprendizagem. |
 | 9 | Marque os termos e crie o perfil. | Abre **Olá, [nome]!** com a aba **Vagas para você**. **Assistente Administrativo** aparece **em primeiro**, com a maior compatibilidade. |
 | 10 | Busque `estoque`. | Só **Auxiliar de Logística** aparece. Clique **Limpar busca**. |
 | 11 | Clique no **nome da empresa** em um cartão. | Abre o perfil da empresa: área, cidade, site, apresentação e as 2 vagas abertas. Não aparecem e-mail, CNPJ nem cota. |
@@ -58,10 +58,24 @@ O mesmo fluxo é verificado automaticamente pela API no teste
 | 21 | No Supabase → **Table Editor** → `jovens_aprendizes`. | A coluna `senha_hash` mostra `$2b$...`, e não a senha digitada. |
 | 22 | Abra http://localhost:8000/docs | A documentação automática da API lista todas as rotas. |
 
+## Parte 5 — Regras da Semana 10 (idade, menores, privacidade)
+
+| # | O que fazer | O que deve acontecer |
+|---|---|---|
+| 23 | Cadastro de jovem com data de nascimento de **13 anos**. | Aviso abaixo da data e, ao enviar: "A Lei da Aprendizagem permite aprendizes a partir de 14 anos." |
+| 24 | Troque para **15 anos**. | Aparece o bloco **Responsável legal** (nome, e-mail e autorização), obrigatório. Preencha e crie a conta. |
+| 25 | Cadastro com **30 anos** sem marcar PcD; depois marque **Sou pessoa com deficiência**. | Primeiro recusa ("idade máxima é 24 anos"); com PcD, aceita. |
+| 26 | Na empresa, aba **Candidatos compatíveis**, antes de o jovem de 15 anos se candidatar. | Aparece só o primeiro nome e a descrição, com o aviso "Contato e arquivos liberados quando o jovem se candidatar". |
+| 27 | O jovem se candidata; a empresa abre **Candidaturas**. | Nome completo, idade (15 anos), e-mail e currículo; **não** aparecem nascimento, PcD nem o responsável. |
+| 28 | Empresa em **Organograma e cota → Dados da empresa**: porte **Microempresa (ME)** e salve. | Topo: "Cota não obrigatória · Dispensada", citando a LC 123/2006. |
+| 29 | Rodapé → **Política de privacidade**. | Página com dados coletados, quem vê o quê, menores de idade e direitos. |
+| 30 | Jovem → **Meu perfil → Excluir minha conta** → confirmar. | Volta para a página inicial; a candidatura some do painel da empresa. |
+
 ## Se algo der errado
 
 | Sintoma | Causa provável |
 |---|---|
 | "Não foi possível conectar ao servidor" | A API não está rodando (passo "Antes de começar"). |
 | Erro 500 / página não carrega dados | Supabase pausado: no painel do Supabase, **Restore project**. |
+| Site no Render demora ~1 min para abrir | Plano gratuito: o site "dorme" após 15 min sem acesso e acorda no primeiro acesso. |
 | Aparece o usuário errado no topo | Duas contas na mesma janela: use janelas anônimas separadas. |

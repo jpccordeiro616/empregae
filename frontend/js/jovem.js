@@ -337,7 +337,8 @@ function renderAbaPerfil() {
                     <div class="form-row">
                         <div class="form-group">
                             <label for="perfil_nascimento">Data de nascimento</label>
-                            <input type="date" id="perfil_nascimento" class="form-control" value="${esc(u.data_nascimento || '')}">
+                            <input type="date" id="perfil_nascimento" class="form-control" value="${esc(u.data_nascimento || '')}" disabled>
+                            <p class="hint">${u.idade !== null && u.idade !== undefined ? `${u.idade} anos · ` : ''}não pode ser alterada.</p>
                         </div>
                         <div class="form-group">
                             <label for="perfil_cidade">Cidade</label>
@@ -356,7 +357,7 @@ function renderAbaPerfil() {
                 <div class="glass-panel">
                     <h3>Currículo e vídeo</h3>
                     ${renderArquivo('curriculo', 'file-text', 'Currículo', 'PDF de até 5 MB', u.curriculo_url, 'application/pdf')}
-                    ${renderArquivo('video', 'video', 'Vídeo de apresentação', 'MP4, WebM ou MOV de até 50 MB', u.video_url, 'video/mp4,video/webm,video/quicktime')}
+                    ${renderArquivo('video', 'video', 'Vídeo de apresentação', 'MP4, WebM ou MOV de até 20 MB', u.video_url, 'video/mp4,video/webm,video/quicktime')}
                     ${state.jovem.videoUrl ? `<video class="video-preview" src="${state.jovem.videoUrl}" controls></video>` : ''}
                 </div>
                 <div class="glass-panel">
@@ -366,9 +367,42 @@ function renderAbaPerfil() {
                         ${itens.map(([nome, ok]) => `<li class="${ok ? 'ok' : ''}"><i data-lucide="${ok ? 'check-circle-2' : 'circle'}"></i> ${nome}</li>`).join('')}
                     </ul>
                 </div>
+                ${u.responsavel_nome ? `
+                    <div class="glass-panel">
+                        <h3>Responsável legal</h3>
+                        <p class="small"><strong>${esc(u.responsavel_nome)}</strong> · ${esc(u.responsavel_email)}</p>
+                        <p class="hint">Sua conta está vinculada a este responsável por você ter menos de 18 anos. Ele não aparece para as empresas.</p>
+                    </div>` : ''}
+                ${renderExcluirConta('jovem')}
             </div>
         </div>
     `;
+}
+
+// ---------- Excluir conta (LGPD, art. 18, VI) — usado pelo jovem e pela empresa ----------
+
+function renderExcluirConta(tipo) {
+    const oQueApaga = tipo === 'jovem'
+        ? 'seu perfil, suas candidaturas, currículo e vídeo'
+        : 'a empresa, as vagas, as candidaturas recebidas e o organograma';
+    return `
+        <div class="glass-panel zona-perigo">
+            <h3>Excluir minha conta</h3>
+            <p class="small muted">Apaga definitivamente ${oQueApaga}. Não é possível desfazer.</p>
+            <button class="btn btn-perigo btn-sm" style="margin-top: 0.75rem;" onclick="excluirConta('${tipo}')"><i data-lucide="trash-2"></i> Excluir minha conta</button>
+        </div>
+    `;
+}
+
+async function excluirConta(tipo) {
+    if (!confirm('Tem certeza? Todos os seus dados serão apagados definitivamente.')) return;
+    try {
+        await api(tipo === 'jovem' ? '/jovens/me' : '/empresas/me', {method: 'DELETE'});
+        sair();
+        toast('Conta excluída. Seus dados foram apagados.');
+    } catch (err) {
+        toast(err.message, true);
+    }
 }
 
 function renderArquivo(tipo, icone, titulo, formatos, url, accept) {
@@ -395,7 +429,6 @@ async function salvarPerfilJovem(e) {
     try {
         state.usuario = await api('/jovens/me', {method: 'PATCH', body: {
             nome: document.getElementById('perfil_nome').value.trim(),
-            data_nascimento: document.getElementById('perfil_nascimento').value || null,
             cidade: document.getElementById('perfil_cidade').value.trim() || null,
             descricao: document.getElementById('perfil_desc').value.trim(),
         }});

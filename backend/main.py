@@ -3,22 +3,23 @@ import uuid
 from datetime import date
 from pathlib import Path
 from typing import Annotated, Literal
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Depends, HTTPException, Request, UploadFile, File
+from fastapi.responses import JSONResponse
+from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from pydantic import AfterValidator, BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 import models
 from database import engine, get_db
 from matcher import calcular_compatibilidades
-from auth import gerar_hash, senha_confere, criar_token, usuario_logado, jovem_logado, empresa_logada
+from auth import SENHA_MAX_BYTES, gerar_hash, senha_confere, criar_token, usuario_logado, jovem_logado, empresa_logada
 
 # As tabelas são criadas pelo schema.sql (rodar no SQL Editor do Supabase).
 
 BASE_DIR = Path(__file__).resolve().parent
-UPLOADS_DIR = BASE_DIR / "uploads"
 FRONTEND_DIR = BASE_DIR.parent / "frontend"
 
 app = FastAPI(title="Empregae API")
@@ -30,6 +31,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Dois cliques ao mesmo tempo podem passar pela checagem de duplicidade e só esbarrar
+# na restrição UNIQUE do banco: responde 409 em vez de erro 500.
+@app.exception_handler(IntegrityError)
+def erro_de_integridade(request: Request, exc: IntegrityError):
+    return JSONResponse(status_code=409, content={"detail": "Este registro já existe ou conflita com outro."})
 
 @app.get("/saude")
 def saude(db: Session = Depends(get_db)):
@@ -43,6 +50,11 @@ def _normalizar_email(email: str) -> str:
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
         raise ValueError("E-mail inválido.")
     return email
+
+def _validar_senha(senha: str) -> str:
+    if len(senha.encode()) > SENHA_MAX_BYTES:
+        raise ValueError("A senha pode ter no máximo 72 caracteres (menos, se tiver acentos).")
+    return senha
 
 def _normalizar_site(site: str | None) -> str | None:
     if site is None or not site.strip():
@@ -66,29 +78,51 @@ def _normalizar_cnpj(cnpj: str | None) -> str | None:
 Email = Annotated[str, AfterValidator(_normalizar_email)]
 Cnpj = Annotated[str | None, AfterValidator(_normalizar_cnpj)]
 Site = Annotated[str | None, AfterValidator(_normalizar_site)]
+Senha = Annotated[str, Field(min_length=6), AfterValidator(_validar_senha)]
+EmailOpcional = Annotated[str | None, AfterValidator(lambda e: _normalizar_email(e) if e else None)]
+
+# Lei da Aprendizagem: 14 a 24 anos (sem limite máximo para pessoa com deficiência).
+IDADE_MINIMA, IDADE_MAXIMA, MAIORIDADE = 14, 24, 18
+
+def calcular_idade(nascimento: date, hoje: date | None = None) -> int:
+    hoje = hoje or date.today()
+    return hoje.year - nascimento.year - ((hoje.month, hoje.day) < (nascimento.month, nascimento.day))
+
+# Dispensados da cota: LC 123/2006, art. 51, III e Decreto 9.579/2018, art. 56, I e II.
+PORTES_DISPENSADOS = {
+    "me": "Microempresas são dispensadas da cota (LC 123/2006, art. 51, III).",
+    "epp": "Empresas de pequeno porte são dispensadas da cota (LC 123/2006, art. 51, III).",
+    "esfl": "Entidades sem fins lucrativos de educação profissional são dispensadas da cota (Decreto 9.579/2018, art. 56, II).",
+}
+Porte = Literal["me", "epp", "esfl", "demais"]
 
 class JovemCriar(BaseModel):
     nome: str = Field(min_length=2)
     email: Email
-    senha: str = Field(min_length=6)
+    senha: Senha
     descricao: str
-    data_nascimento: date | None = None
+    data_nascimento: date
     cidade: str | None = None
+    pcd: bool = False
+    responsavel_nome: str | None = None
+    responsavel_email: EmailOpcional = None
+    aceite_responsavel: bool = False
     aceitou_lgpd: bool
     aceitou_lei_aprendizagem: bool
 
 class JovemAtualizar(BaseModel):
+    # A data de nascimento não é editável: ela define as regras de idade aceitas no cadastro.
     nome: str | None = Field(default=None, min_length=2)
     descricao: str | None = None
-    data_nascimento: date | None = None
     cidade: str | None = None
 
 class EmpresaCriar(BaseModel):
     nome: str = Field(min_length=2)
     email: Email
-    senha: str = Field(min_length=6)
+    senha: Senha
     cnpj: Cnpj = None
     total_funcionarios: int | None = Field(default=None, ge=0)
+    porte: Porte = "demais"
 
 class EmpresaAtualizar(BaseModel):
     nome: str | None = Field(default=None, min_length=2)
@@ -98,6 +132,7 @@ class EmpresaAtualizar(BaseModel):
     cidade: str | None = Field(default=None, max_length=100)
     area_atuacao: str | None = Field(default=None, max_length=100)
     site: Site = None
+    porte: Porte | None = None
 
 class Login(BaseModel):
     email: str
@@ -127,16 +162,32 @@ class OrganogramaSalvar(BaseModel):
 # ---------- Formato das respostas ----------
 
 def perfil_jovem(j: models.JovemAprendiz) -> dict:
+    """Perfil completo: só para o próprio jovem."""
     return {
         "id": j.id, "nome": j.nome, "email": j.email, "data_nascimento": j.data_nascimento,
+        "idade": calcular_idade(j.data_nascimento) if j.data_nascimento else None,
         "cidade": j.cidade, "descricao": j.descricao, "curriculo_url": j.curriculo_url,
-        "video_url": j.video_url,
+        "video_url": j.video_url, "pcd": j.pcd,
+        "responsavel_nome": j.responsavel_nome, "responsavel_email": j.responsavel_email,
     }
+
+def perfil_para_empresa(j: models.JovemAprendiz) -> dict:
+    """O que uma empresa vê de quem se candidatou: sem data de nascimento, PcD
+    (dado sensível) nem dados do responsável. A idade basta para a contratação."""
+    return {
+        "id": j.id, "nome": j.nome, "email": j.email, "cidade": j.cidade, "descricao": j.descricao,
+        "idade": calcular_idade(j.data_nascimento) if j.data_nascimento else None,
+        "curriculo_url": j.curriculo_url, "video_url": j.video_url,
+    }
+
+def jovem_candidatou_na_empresa(jovem: models.JovemAprendiz, empresa_id: int) -> bool:
+    return any(c.vaga.empresa_id == empresa_id for c in jovem.candidaturas)
 
 def perfil_empresa(e: models.Empresa) -> dict:
     return {
         "id": e.id, "nome": e.nome, "email": e.email, "cnpj": e.cnpj, "total_funcionarios": e.total_funcionarios,
         "descricao": e.descricao, "cidade": e.cidade, "area_atuacao": e.area_atuacao, "site": e.site,
+        "porte": e.porte,
     }
 
 def dados_vaga(v: models.Vaga) -> dict:
@@ -157,10 +208,28 @@ def _email_em_uso(db: Session, modelo, email: str) -> bool:
 def criar_jovem(dados: JovemCriar, db: Session = Depends(get_db)):
     if not dados.aceitou_lgpd or not dados.aceitou_lei_aprendizagem:
         raise HTTPException(status_code=400, detail="É necessário aceitar os termos da LGPD e da Lei da Aprendizagem.")
+    if dados.data_nascimento > date.today():
+        raise HTTPException(status_code=400, detail="Data de nascimento inválida.")
+    idade = calcular_idade(dados.data_nascimento)
+    if idade < IDADE_MINIMA:
+        raise HTTPException(status_code=400, detail="A Lei da Aprendizagem permite aprendizes a partir de 14 anos.")
+    if idade > IDADE_MAXIMA and not dados.pcd:
+        raise HTTPException(status_code=400, detail="A idade máxima do aprendiz é 24 anos (sem limite para pessoa com deficiência).")
+
+    valores = dados.model_dump(exclude={"senha"})
+    if idade < MAIORIDADE:
+        # ECA Digital (Lei 15.211/2025), art. 24, e LGPD, art. 14: conta de menor vinculada ao responsável.
+        if not (dados.responsavel_nome and len(dados.responsavel_nome.strip()) >= 3 and dados.responsavel_email and dados.aceite_responsavel):
+            raise HTTPException(status_code=400, detail="Menores de 18 anos precisam informar o nome e o e-mail do responsável legal e confirmar a autorização dele.")
+        valores["responsavel_nome"] = dados.responsavel_nome.strip()
+    else:
+        # Minimização de dados: maiores de idade não precisam de responsável.
+        valores.update(responsavel_nome=None, responsavel_email=None, aceite_responsavel=False)
+
     if _email_em_uso(db, models.JovemAprendiz, dados.email):
         raise HTTPException(status_code=409, detail="Este e-mail já está cadastrado.")
 
-    jovem = models.JovemAprendiz(**dados.model_dump(exclude={"senha"}), senha_hash=gerar_hash(dados.senha))
+    jovem = models.JovemAprendiz(**valores, senha_hash=gerar_hash(dados.senha))
     db.add(jovem)
     db.commit()
     db.refresh(jovem)
@@ -199,6 +268,17 @@ def atualizar_perfil_jovem(dados: JovemAtualizar, jovem: models.JovemAprendiz = 
     db.commit()
     return perfil_jovem(jovem)
 
+@app.delete("/jovens/me")
+def excluir_conta_jovem(jovem: models.JovemAprendiz = Depends(jovem_logado), db: Session = Depends(get_db)):
+    """LGPD, art. 18, VI: o titular pode pedir a eliminação dos seus dados."""
+    for candidatura in list(jovem.candidaturas):
+        db.delete(candidatura)
+    _apagar_arquivo(jovem.curriculo_url, db)
+    _apagar_arquivo(jovem.video_url, db)
+    db.delete(jovem)
+    db.commit()
+    return {"mensagem": "Conta e dados excluídos."}
+
 @app.get("/empresas/me")
 def ver_perfil_empresa(empresa: models.Empresa = Depends(empresa_logada)):
     return perfil_empresa(empresa)
@@ -213,14 +293,25 @@ def atualizar_perfil_empresa(dados: EmpresaAtualizar, empresa: models.Empresa = 
     db.commit()
     return perfil_empresa(empresa)
 
-# Currículo e vídeo ficam em backend/uploads/ por enquanto.
-# shortcut: no deploy (Semana 11) trocar pelo Supabase Storage, pois o disco do Render é apagado a cada deploy.
+@app.delete("/empresas/me")
+def excluir_conta_empresa(empresa: models.Empresa = Depends(empresa_logada), db: Session = Depends(get_db)):
+    """Exclui a empresa com vagas, candidaturas recebidas e organograma."""
+    for vaga in list(empresa.vagas):
+        for candidatura in list(vaga.candidaturas):
+            db.delete(candidatura)
+        db.delete(vaga)
+    db.delete(empresa)  # setores saem junto (cascade)
+    db.commit()
+    return {"mensagem": "Conta e dados excluídos."}
+
+# Currículo e vídeo ficam na tabela "arquivos" do banco (o disco do Render é apagado a cada
+# reinício). O limite do vídeo é menor por causa dos 500 MB do banco no plano gratuito.
 TIPOS_ARQUIVO = {
     "curriculo": ({"application/pdf": ".pdf"}, 5 * 1024 * 1024),
-    "video": ({"video/mp4": ".mp4", "video/webm": ".webm", "video/quicktime": ".mov"}, 50 * 1024 * 1024),
+    "video": ({"video/mp4": ".mp4", "video/webm": ".webm", "video/quicktime": ".mov"}, 20 * 1024 * 1024),
 }
 
-async def _salvar_arquivo(arquivo: UploadFile, tipo: str) -> str:
+async def _salvar_arquivo(arquivo: UploadFile, tipo: str, jovem: models.JovemAprendiz, db: Session) -> str:
     formatos, tamanho_max = TIPOS_ARQUIVO[tipo]
     extensao = formatos.get(arquivo.content_type)
     if not extensao:
@@ -229,27 +320,26 @@ async def _salvar_arquivo(arquivo: UploadFile, tipo: str) -> str:
     if len(conteudo) > tamanho_max:
         raise HTTPException(status_code=400, detail=f"Arquivo maior que {tamanho_max // (1024 * 1024)} MB.")
 
-    UPLOADS_DIR.mkdir(exist_ok=True)
     nome = f"{uuid.uuid4().hex}{extensao}"
-    (UPLOADS_DIR / nome).write_bytes(conteudo)
+    db.add(models.Arquivo(nome=nome, jovem_id=jovem.id, content_type=arquivo.content_type, tamanho=len(conteudo), conteudo=conteudo))
     return f"/arquivos/{nome}"
 
-def _apagar_arquivo(url: str | None):
+def _apagar_arquivo(url: str | None, db: Session):
     if url:
-        (UPLOADS_DIR / Path(url).name).unlink(missing_ok=True)
+        db.query(models.Arquivo).filter(models.Arquivo.nome == Path(url).name).delete()
 
 @app.post("/jovens/me/curriculo")
 async def enviar_curriculo(arquivo: UploadFile = File(...), jovem: models.JovemAprendiz = Depends(jovem_logado), db: Session = Depends(get_db)):
-    url = await _salvar_arquivo(arquivo, "curriculo")
-    _apagar_arquivo(jovem.curriculo_url)
+    url = await _salvar_arquivo(arquivo, "curriculo", jovem, db)
+    _apagar_arquivo(jovem.curriculo_url, db)
     jovem.curriculo_url = url
     db.commit()
     return {"mensagem": "Currículo enviado com sucesso!", "curriculo_url": url}
 
 @app.post("/jovens/me/video")
 async def enviar_video(arquivo: UploadFile = File(...), jovem: models.JovemAprendiz = Depends(jovem_logado), db: Session = Depends(get_db)):
-    url = await _salvar_arquivo(arquivo, "video")
-    _apagar_arquivo(jovem.video_url)
+    url = await _salvar_arquivo(arquivo, "video", jovem, db)
+    _apagar_arquivo(jovem.video_url, db)
     jovem.video_url = url
     db.commit()
     return {"mensagem": "Vídeo enviado com sucesso!", "video_url": url}
@@ -258,13 +348,14 @@ async def enviar_video(arquivo: UploadFile = File(...), jovem: models.JovemApren
 def baixar_arquivo(nome: str, usuario: tuple[int, str] = Depends(usuario_logado), db: Session = Depends(get_db)):
     if not re.fullmatch(r"[0-9a-f]{32}\.(pdf|mp4|webm|mov)", nome):
         raise HTTPException(status_code=404, detail="Arquivo não encontrado.")
-    url = f"/arquivos/{nome}"
-    dono = db.query(models.JovemAprendiz).filter(or_(models.JovemAprendiz.curriculo_url == url, models.JovemAprendiz.video_url == url)).first()
+    arquivo = db.get(models.Arquivo, nome)
+    dono = db.get(models.JovemAprendiz, arquivo.jovem_id) if arquivo else None
     usuario_id, tipo = usuario
-    # Empresas podem ver arquivos de qualquer candidato; um jovem só vê os próprios.
-    if not dono or (tipo == "jovem" and dono.id != usuario_id) or not (UPLOADS_DIR / nome).exists():
+    # O jovem vê os próprios arquivos; a empresa só vê os de quem se candidatou a uma vaga dela.
+    permitido = dono and (dono.id == usuario_id if tipo == "jovem" else jovem_candidatou_na_empresa(dono, usuario_id))
+    if not permitido:
         raise HTTPException(status_code=404, detail="Arquivo não encontrado.")
-    return FileResponse(UPLOADS_DIR / nome)
+    return Response(arquivo.conteudo, media_type=arquivo.content_type, headers={"Cache-Control": "private, no-store"})
 
 # ---------- Semana 4: vagas, candidaturas, cota e filtro inteligente ----------
 
@@ -351,7 +442,7 @@ def candidaturas_recebidas(empresa: models.Empresa = Depends(empresa_logada)):
             resultado.append({
                 "id": candidatura.id, "status": candidatura.status, "criado_em": candidatura.criado_em,
                 "vaga_id": vaga.id, "vaga_titulo": vaga.titulo,
-                "candidato": perfil_jovem(candidatura.jovem), "compatibilidade": nota,
+                "candidato": perfil_para_empresa(candidatura.jovem), "compatibilidade": nota,
             })
     resultado.sort(key=lambda x: x["compatibilidade"], reverse=True)
     return resultado
@@ -367,16 +458,25 @@ def atualizar_candidatura(candidatura_id: int, dados: CandidaturaAtualizar, empr
 
 @app.get("/empresas/me/cota")
 def cota_aprendizes(empresa: models.Empresa = Depends(empresa_logada), db: Session = Depends(get_db)):
-    """RN01/RN02: mínimo de 5% (fração arredonda para cima) e máximo de 15%."""
+    """RN01/RN02: mínimo de 5% (fração arredonda para cima, Decreto 9.579/2018, art. 51, §1º)
+    e máximo de 15%. ME, EPP e entidades sem fins lucrativos de educação profissional são dispensadas."""
     total = empresa.total_funcionarios or 0
-    cota_minima = (total * 5 + 99) // 100
-    cota_maxima = max(cota_minima, total * 15 // 100)
     contratados = (
         db.query(models.Candidatura).join(models.Vaga)
         .filter(models.Vaga.empresa_id == empresa.id, models.Candidatura.status == "contratado").count()
     )
+    if empresa.porte in PORTES_DISPENSADOS:
+        return {
+            "total_funcionarios": empresa.total_funcionarios, "porte": empresa.porte,
+            "obrigatoria": False, "motivo": PORTES_DISPENSADOS[empresa.porte],
+            "cota_minima": 0, "cota_maxima": None,
+            "contratados": contratados, "faltam_para_cota_minima": 0,
+        }
+    cota_minima = (total * 5 + 99) // 100
+    cota_maxima = max(cota_minima, total * 15 // 100)
     return {
-        "total_funcionarios": empresa.total_funcionarios,
+        "total_funcionarios": empresa.total_funcionarios, "porte": empresa.porte,
+        "obrigatoria": True, "motivo": None,
         "cota_minima": cota_minima,
         "cota_maxima": cota_maxima,
         "contratados": contratados,
@@ -420,6 +520,7 @@ def vagas_recomendadas(jovem: models.JovemAprendiz = Depends(jovem_logado), db: 
 @app.get("/empresas/me/candidatos")
 def candidatos_compativeis(empresa: models.Empresa = Depends(empresa_logada), db: Session = Depends(get_db)):
     jovens = db.query(models.JovemAprendiz).all()
+    candidatos_de_empresa = {c.jovem_id for v in empresa.vagas for c in v.candidaturas}
     candidatos = []
     for vaga in empresa.vagas:
         if not vaga.aberta:
@@ -428,17 +529,21 @@ def candidatos_compativeis(empresa: models.Empresa = Depends(empresa_logada), db
         candidatos_da_vaga = {c.jovem_id for c in vaga.candidaturas}
         for jovem, nota in zip(jovens, notas):
             if nota > 0:
+                # Privacidade por padrão (ECA Digital, art. 7º): sem candidatura à empresa,
+                # ela vê só o primeiro nome e a descrição; contato, cidade e arquivos ficam ocultos.
+                liberado = jovem.id in candidatos_de_empresa
                 candidatos.append({
                     "vaga_id": vaga.id,
                     "vaga_titulo": vaga.titulo,
                     "candidato_id": jovem.id,
-                    "candidato_nome": jovem.nome,
-                    "candidato_email": jovem.email,
-                    "candidato_cidade": jovem.cidade,
+                    "candidato_nome": jovem.nome if liberado else jovem.nome.split()[0],
+                    "candidato_email": jovem.email if liberado else None,
+                    "candidato_cidade": jovem.cidade if liberado else None,
                     "candidato_descricao": jovem.descricao,
-                    "curriculo_url": jovem.curriculo_url,
-                    "video_url": jovem.video_url,
+                    "curriculo_url": jovem.curriculo_url if liberado else None,
+                    "video_url": jovem.video_url if liberado else None,
                     "ja_candidatou": jovem.id in candidatos_da_vaga,
+                    "contato_liberado": liberado,
                     "compatibilidade": nota,
                 })
     candidatos.sort(key=lambda x: x["compatibilidade"], reverse=True)

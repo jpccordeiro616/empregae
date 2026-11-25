@@ -164,7 +164,7 @@ function mostrarErroForm(mensagem) {
     if (el) {
         el.innerHTML = renderErroForm();
         if (window.lucide) lucide.createIcons();
-        el.scrollIntoView({block: 'center', behavior: 'smooth'});
+        if (mensagem) el.scrollIntoView({block: 'center', behavior: 'smooth'});
     }
 }
 
@@ -265,8 +265,9 @@ function renderCadastroJovem() {
                     </div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="app_nascimento">Data de nascimento <span class="optional">(opcional)</span></label>
-                            <input type="date" id="app_nascimento" class="form-control">
+                            <label for="app_nascimento">Data de nascimento</label>
+                            <input type="date" id="app_nascimento" class="form-control" required max="${hojeISO()}" oninput="atualizarRegrasIdade()">
+                            <p class="hint" id="idade_info">Aprendizes têm de 14 a 24 anos.</p>
                         </div>
                         <div class="form-group">
                             <label for="app_cidade">Cidade <span class="optional">(opcional)</span></label>
@@ -279,10 +280,35 @@ function renderCadastroJovem() {
                             placeholder="Ex: Gosto de organizar documentos, tenho facilidade com computador e quero trabalhar na área administrativa."></textarea>
                         <p class="hint">Conte suas habilidades, interesses e o que busca. Quanto mais detalhes, melhores as recomendações.</p>
                     </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="app_pcd" onchange="atualizarRegrasIdade()">
+                        <label for="app_pcd">Sou pessoa com deficiência (sem limite de idade máxima). Essa informação não é mostrada às empresas.</label>
+                    </div>
+                    <fieldset id="bloco_responsavel" class="bloco-responsavel" hidden>
+                        <legend><i data-lucide="shield-check"></i> Responsável legal</legend>
+                        <p class="small muted" style="margin-bottom: 0.9rem;">
+                            Como você tem menos de 18 anos, sua conta fica vinculada a um responsável legal
+                            (ECA Digital, Lei nº 15.211/2025, art. 24).
+                        </p>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="resp_nome">Nome do responsável</label>
+                                <input type="text" id="resp_nome" class="form-control" minlength="3">
+                            </div>
+                            <div class="form-group">
+                                <label for="resp_email">E-mail do responsável</label>
+                                <input type="email" id="resp_email" class="form-control">
+                            </div>
+                        </div>
+                        <div class="checkbox-group" style="margin-bottom: 0;">
+                            <input type="checkbox" id="resp_aceite">
+                            <label for="resp_aceite">Meu responsável legal está ciente e autoriza meu cadastro no Empregae.</label>
+                        </div>
+                    </fieldset>
                     <div class="alert alert-info"><i data-lucide="info"></i><span>Depois do cadastro, você poderá enviar seu currículo e um vídeo de apresentação.</span></div>
                     <div class="checkbox-group">
                         <input type="checkbox" id="lgpd" required>
-                        <label for="lgpd">Declaro estar ciente e de acordo com o tratamento dos meus dados pessoais conforme a LGPD (Lei nº 13.709/2018).</label>
+                        <label for="lgpd">Li a <a href="/#privacidade" target="_blank">política de privacidade</a> e concordo com o tratamento dos meus dados conforme a LGPD (Lei nº 13.709/2018).</label>
                     </div>
                     <div class="checkbox-group">
                         <input type="checkbox" id="lei" required>
@@ -305,7 +331,11 @@ async function handleRegisterApprentice(e) {
             nome: document.getElementById('app_name').value.trim(),
             email: document.getElementById('app_email').value,
             senha: document.getElementById('app_password').value,
-            data_nascimento: document.getElementById('app_nascimento').value || null,
+            data_nascimento: document.getElementById('app_nascimento').value,
+            pcd: document.getElementById('app_pcd').checked,
+            responsavel_nome: document.getElementById('resp_nome').value.trim() || null,
+            responsavel_email: document.getElementById('resp_email').value.trim() || null,
+            aceite_responsavel: document.getElementById('resp_aceite').checked,
             cidade: document.getElementById('app_cidade').value.trim() || null,
             descricao: document.getElementById('app_desc').value.trim(),
             aceitou_lgpd: document.getElementById('lgpd').checked,
@@ -317,6 +347,99 @@ async function handleRegisterApprentice(e) {
         travarBotao(form, false);
         mostrarErroForm(err.message);
     }
+}
+
+// ---------- Regras de idade no cadastro (Semana 10) ----------
+
+function hojeISO() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function idadeEm(nascimentoISO) {
+    const [a, m, d] = nascimentoISO.split('-').map(Number);
+    const hoje = new Date();
+    return hoje.getFullYear() - a - ((hoje.getMonth() + 1 < m || (hoje.getMonth() + 1 === m && hoje.getDate() < d)) ? 1 : 0);
+}
+
+// Mostra o bloco do responsável para menores de 18 e avisa sobre a faixa de 14 a 24 anos.
+// A API confere as mesmas regras; aqui é só para orientar quem está preenchendo.
+function atualizarRegrasIdade() {
+    const valor = document.getElementById('app_nascimento').value;
+    const info = document.getElementById('idade_info');
+    const bloco = document.getElementById('bloco_responsavel');
+    const pcd = document.getElementById('app_pcd').checked;
+    mostrarErroForm('');  // um erro de idade anterior deixa de valer quando a data muda
+    if (!valor) return;
+    const idade = idadeEm(valor);
+    const menor = idade >= 14 && idade < 18;
+    bloco.hidden = !menor;
+    ['resp_nome', 'resp_email', 'resp_aceite'].forEach(id => document.getElementById(id).required = menor);
+    if (idade < 14) info.textContent = `${idade} anos: a Lei da Aprendizagem permite aprendizes a partir de 14 anos.`;
+    else if (idade > 24 && !pcd) info.textContent = `${idade} anos: o limite é 24 anos (sem limite para pessoa com deficiência).`;
+    else info.textContent = `${idade} anos.`;
+    info.classList.toggle('hint-erro', idade < 14 || (idade > 24 && !pcd));
+}
+
+const PORTES = [
+    ['demais', 'Demais empresas (médio e grande porte)'],
+    ['me', 'Microempresa (ME)'],
+    ['epp', 'Empresa de pequeno porte (EPP)'],
+    ['esfl', 'Entidade sem fins lucrativos de educação profissional'],
+];
+
+function opcoesPorte(selecionado) {
+    return PORTES.map(([valor, nome]) => `<option value="${valor}" ${valor === selecionado ? 'selected' : ''}>${nome}</option>`).join('');
+}
+
+// ---------- Política de privacidade (LGPD / ECA Digital) ----------
+
+function renderPrivacidade() {
+    return `
+        <div class="container-narrow politica">
+            <div class="glass-panel">
+                <h2>Política de privacidade</h2>
+                <p class="muted small">Empregae · projeto acadêmico · última atualização: novembro de 2026</p>
+
+                <h3>1. Quais dados coletamos</h3>
+                <ul>
+                    <li><strong>Jovens:</strong> nome, e-mail, senha (guardada só como código criptografado), data de nascimento, cidade, descrição, currículo, vídeo de apresentação e, se informado, se é pessoa com deficiência. Para menores de 18 anos: nome e e-mail do responsável legal.</li>
+                    <li><strong>Empresas:</strong> nome, e-mail, senha (criptografada), CNPJ, porte, organograma (setores e funcionários) e dados de apresentação.</li>
+                </ul>
+
+                <h3>2. Para que usamos</h3>
+                <ul>
+                    <li>Conectar jovens a vagas de aprendizagem e calcular a compatibilidade (Filtro Inteligente).</li>
+                    <li>A data de nascimento serve só para conferir as regras de idade da Lei da Aprendizagem e da proteção de menores.</li>
+                    <li>Calcular a cota de aprendizes das empresas.</li>
+                    <li>Não há publicidade e os dados não são vendidos nem usados para outra finalidade.</li>
+                </ul>
+
+                <h3>3. Quem vê os seus dados</h3>
+                <ul>
+                    <li>Antes de você se candidatar, uma empresa vê apenas o seu <strong>primeiro nome</strong> e a sua <strong>descrição</strong>.</li>
+                    <li>Depois que você se candidata a uma vaga dela, a empresa passa a ver nome completo, e-mail, cidade, idade, currículo e vídeo.</li>
+                    <li>Empresas <strong>nunca</strong> veem sua data de nascimento, a informação sobre deficiência nem os dados do seu responsável.</li>
+                    <li>O perfil público das empresas não mostra e-mail, CNPJ, organograma nem cota.</li>
+                </ul>
+
+                <h3>4. Menores de idade</h3>
+                <p>O tratamento de dados de adolescentes é feito no seu melhor interesse (LGPD, art. 14). Contas de menores de 18 anos ficam vinculadas a um responsável legal, que informa nome e e-mail e autoriza o cadastro (ECA Digital, Lei nº 15.211/2025, art. 24). A plataforma usa por padrão a configuração mais protetiva (art. 7º): o contato só é liberado para empresas às quais o jovem se candidatou.</p>
+
+                <h3>5. Seus direitos (LGPD, art. 18)</h3>
+                <ul>
+                    <li><strong>Acesso e correção:</strong> veja e edite seus dados em "Meu perfil".</li>
+                    <li><strong>Eliminação:</strong> use "Excluir minha conta" no perfil. A conta, as candidaturas, o currículo e o vídeo são apagados.</li>
+                </ul>
+
+                <h3>6. Segurança</h3>
+                <p>Senhas criptografadas (bcrypt), acesso por login com token, banco de dados com acesso restrito e arquivos visíveis só para o dono e para as empresas às quais ele se candidatou.</p>
+
+                <p class="muted small" style="margin-top: 1.5rem;">Este é um projeto acadêmico em fase de testes. Os dados podem ser apagados ao final dos testes.</p>
+                <button class="btn btn-ghost btn-sm" style="margin-top: 1rem;" onclick="irParaInicio()"><i data-lucide="arrow-left"></i> Voltar</button>
+            </div>
+        </div>
+    `;
 }
 
 function renderCadastroEmpresa() {
@@ -332,6 +455,11 @@ function renderCadastroEmpresa() {
                     <div class="form-group">
                         <label for="comp_name">Nome da empresa</label>
                         <input type="text" id="comp_name" class="form-control" autocomplete="organization" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="comp_porte">Porte</label>
+                        <select id="comp_porte" class="form-control">${opcoesPorte('demais')}</select>
+                        <p class="hint">ME, EPP e entidades sem fins lucrativos de educação profissional são dispensadas da cota.</p>
                     </div>
                     <div class="form-group">
                         <label for="comp_cnpj">CNPJ <span class="optional">(opcional)</span></label>
@@ -371,6 +499,7 @@ async function handleRegisterCompany(e) {
             email: document.getElementById('comp_email').value,
             senha: document.getElementById('comp_password').value,
             total_funcionarios: funcionarios === '' ? null : Number(funcionarios),
+            porte: document.getElementById('comp_porte').value,
         }});
         await entrar(res.token, 'empresa');
         toast('Empresa cadastrada com sucesso!');

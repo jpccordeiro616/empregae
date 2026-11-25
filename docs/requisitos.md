@@ -16,13 +16,16 @@ Conectar **jovens aprendizes** a **empresas que precisam cumprir a cota obrigat�
 | Código | Regra |
 |---|---|
 | RN01 | A cota de aprendizes é de **no mínimo 5% e no máximo 15%** dos trabalhadores do estabelecimento cujas funções exigem formação profissional (art. 429 da CLT). |
-| RN02 | Frações de unidade no cálculo da cota **arredondam para cima** (art. 429, §1º). Ex.: 30 funcionários × 5% = 1,5 → 2 aprendizes. |
-| RN03 | Microempresas (ME) e empresas de pequeno porte (EPP) são **dispensadas** da cota (podem contratar de forma opcional). |
-| RN04 | O aprendiz deve ter **entre 14 e 24 anos** (sem limite de idade para pessoa com deficiência). |
+| RN02 | Frações de unidade no cálculo da cota **arredondam para cima** (Decreto 9.579/2018, art. 51, §1º). Ex.: 30 funcionários × 5% = 1,5 → 2 aprendizes. |
+| RN03 | Microempresas (ME), empresas de pequeno porte (EPP) (LC 123/2006, art. 51, III) e entidades sem fins lucrativos de educação profissional (Decreto 9.579/2018, art. 56, II) são **dispensadas** da cota; podem contratar aprendizes mesmo assim. |
+| RN04 | O aprendiz deve ter **entre 14 e 24 anos** (sem limite de idade para pessoa com deficiência). A data de nascimento é obrigatória e não pode ser alterada depois do cadastro. |
 | RN05 | O cadastro do jovem **só é concluído** com aceite explícito da LGPD e da Lei da Aprendizagem. |
-| RN06 | Dados de menores de idade são tratados conforme a LGPD (art. 14): uso mínimo e apenas para a finalidade de intermediação. |
+| RN06 | Dados de menores de idade são tratados no seu melhor interesse (LGPD, art. 14): uso mínimo e apenas para a finalidade de intermediação. |
 | RN07 | Um jovem pode se candidatar **uma única vez** a cada vaga. |
 | RN08 | "Vagas preenchidas" da empresa = candidaturas com status **contratado**. |
+| RN09 | Menores de 18 anos informam **nome e e-mail do responsável legal** e confirmam a autorização dele (ECA Digital, Lei 15.211/2025, art. 24, que exige o vínculo até 16 anos; aplicado até 18 por ser mais protetivo). |
+| RN10 | **Privacidade por padrão** (ECA Digital, art. 7º): antes da candidatura, a empresa vê só o primeiro nome e a descrição do jovem; contato, cidade, idade, currículo e vídeo só depois que ele se candidata a uma vaga dela. Data de nascimento, PcD (dado sensível) e dados do responsável nunca são mostrados às empresas. |
+| RN11 | O titular pode **excluir a conta** e todos os seus dados (LGPD, art. 18, VI). |
 
 ## 4. Requisitos funcionais
 
