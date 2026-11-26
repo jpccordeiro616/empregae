@@ -95,6 +95,13 @@ porque o disco do Render é apagado a cada reinício.
 No plano gratuito o site "dorme" após 15 min sem acesso; o primeiro acesso depois disso
 leva cerca de 1 minuto.
 
+### Manter o site acordado (UptimeRobot)
+
+Um monitor do [UptimeRobot](https://uptimerobot.com) (plano gratuito) acessa
+`https://empregae.onrender.com/saude` a cada 5 minutos, o que evita que o Render
+coloque o site para dormir. A rota `/saude` aceita GET e HEAD e também consulta o
+banco: se o site ou o Supabase cair, o UptimeRobot avisa por e-mail.
+
 ### Zerar o banco depois dos testes
 
 No SQL Editor do Supabase:

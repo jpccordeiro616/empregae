@@ -38,7 +38,9 @@ app.add_middleware(
 def erro_de_integridade(request: Request, exc: IntegrityError):
     return JSONResponse(status_code=409, content={"detail": "Este registro já existe ou conflita com outro."})
 
-@app.get("/saude")
+# Aceita HEAD também: monitores como o UptimeRobot usam HEAD para checar se o site está no ar.
+# Cada checagem também faz uma consulta no banco, então um banco fora do ar aparece como falha.
+@app.api_route("/saude", methods=["GET", "HEAD"])
 def saude(db: Session = Depends(get_db)):
     db.execute(text("SELECT 1"))
     return {"status": "ok", "banco": engine.dialect.name}

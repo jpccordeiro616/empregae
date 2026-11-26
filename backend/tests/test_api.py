@@ -65,6 +65,7 @@ def criar_vaga(token, titulo="Assistente Administrativo", descricao="auxiliar na
 
 def test_saude():
     assert client.get("/saude").json()["status"] == "ok"
+    assert client.head("/saude").status_code == 200  # usado pelo UptimeRobot
 
 # ---------- Semana 3 ----------
 
